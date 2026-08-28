@@ -1,11 +1,12 @@
 """
-Model registry — load/save model versions against MongoDB.
+Model registry — load/save model versions against Firebase (Firestore & Storage).
 
-Keeps an in-process cache so ``/classify`` doesn't hit the DB on every request.
+Keeps an in-process cache so ``/classify`` doesn't hit Firebase on every request.
 Only reloads when the active model version actually changes.
 
-Serialization uses TensorFlow SavedModel format packed into a zip archive
-stored as binary in MongoDB (or object storage for large models).
+Model serialization uses TensorFlow SavedModel format packed into a zip archive
+uploaded to Firebase Storage (directory: ``models/model_<version>.zip``).
+Model metadata is stored in Firebase Firestore (collection: ``models``).
 """
 
 import io
@@ -18,8 +19,10 @@ from datetime import datetime, timezone
 
 import numpy as np
 
-from app.core.db import get_db
+from firebase_admin import firestore
+from app.core.firebase import get_firestore_db, get_storage_bucket
 from app.core.logging import get_logger
+from app.core.config import settings
 
 logger = get_logger(__name__)
 
@@ -31,21 +34,15 @@ _cached_version: str | None = None
 
 
 # ---------------------------------------------------------------------------
-# Dummy model for testing (kept from Part 1 for backward-compat)
+# Dummy model for testing
 # ---------------------------------------------------------------------------
 class DummyModel:
     """A stub model that returns a fixed prediction.
 
-    Used so ``/classify`` and ``/model/active`` work end-to-end
-    without a real trained TensorFlow model.
+    Used when no real trained model is stored in Firebase Storage.
     """
 
     def predict(self, text):
-        """Return a static safe prediction.
-
-        Accepts either a string or numpy array (to mimic TF model interface).
-        Always returns the tuple format used by the classify route adapter.
-        """
         return ("safe", 0.95, [])
 
 
@@ -53,17 +50,10 @@ class DummyModel:
 # TensorFlow serialization helpers
 # ---------------------------------------------------------------------------
 def serialize_model(model) -> bytes:
-    """Serialize a model to bytes for storage in the database.
-
-    For TensorFlow/Keras models: saves as SavedModel to a temp directory,
-    zips it, and returns the zip bytes.
-
-    For DummyModel (testing): falls back to pickle.
-    """
+    """Serialize a model to zip bytes for storage in Firebase Storage."""
     if isinstance(model, DummyModel):
         return pickle.dumps(model)
 
-    # TensorFlow model — save to temp dir, zip, return bytes
     import tensorflow as tf  # noqa: delayed import
 
     tmp_dir = tempfile.mkdtemp(prefix="ml_model_")
@@ -71,7 +61,6 @@ def serialize_model(model) -> bytes:
         save_path = os.path.join(tmp_dir, "saved_model")
         model.save(save_path)
 
-        # Zip the SavedModel directory into memory
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for root, _dirs, files in os.walk(save_path):
@@ -86,12 +75,7 @@ def serialize_model(model) -> bytes:
 
 
 def deserialize_model(blob: bytes):
-    """Deserialize model bytes back to a model object.
-
-    Tries TensorFlow SavedModel (zip) first; falls back to pickle
-    for DummyModel blobs.
-    """
-    # Check if it's a zip file (TF SavedModel)
+    """Deserialize model zip bytes back to a Keras model object."""
     if blob[:4] == b"PK\x03\x04":  # zip magic bytes
         import tensorflow as tf  # noqa: delayed import
 
@@ -109,38 +93,29 @@ def deserialize_model(blob: bytes):
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
     else:
-        # Fallback: pickle (DummyModel or legacy)
-        return pickle.loads(blob)  # noqa: S301 — controlled internal data only
+        return pickle.loads(blob)
 
 
 # ---------------------------------------------------------------------------
 # Prediction adapter
 # ---------------------------------------------------------------------------
 def run_prediction(model, text: str) -> tuple[str, float, list[str]]:
-    """Run prediction on a single text and return (label, confidence, categories).
-
-    Handles both DummyModel (returns tuple directly) and TF Keras models
-    (returns numpy arrays from dual-output heads).
-    """
+    """Run prediction on a single text and return (label, confidence, categories)."""
     from app.ml.cnn.architecture import LABEL_NAMES, CATEGORY_NAMES
 
     if isinstance(model, DummyModel):
         return model.predict(text)
 
-    # TF model expects a batch — wrap single text in numpy array
     input_array = np.array([[text]])
     predictions = model.predict(input_array, verbose=0)
 
-    # predictions is a list: [label_probs, category_probs]
-    label_probs = predictions[0][0]  # shape (3,)
-    category_probs = predictions[1][0]  # shape (num_categories,)
+    label_probs = predictions[0][0]
+    category_probs = predictions[1][0]
 
-    # Decode label: argmax of softmax
     label_idx = int(np.argmax(label_probs))
     label = LABEL_NAMES[label_idx]
     confidence = float(label_probs[label_idx])
 
-    # Decode categories: threshold at 0.5
     categories = [
         CATEGORY_NAMES[i]
         for i, p in enumerate(category_probs)
@@ -151,115 +126,198 @@ def run_prediction(model, text: str) -> tuple[str, float, list[str]]:
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Public API backed by Firebase (Firestore & Storage)
 # ---------------------------------------------------------------------------
-async def load_active_model():
-    """Load the currently active model from DB (with in-memory caching).
+def get_local_cache_path(version: str) -> str:
+    """Return local disk cache file path for model version archive."""
+    cache_dir = os.path.join(".", "data", "cache", "models")
+    os.makedirs(cache_dir, exist_ok=True)
+    return os.path.join(cache_dir, f"model_{version}.zip")
 
-    On first call (or after version change), fetches the active model record
-    from MongoDB, deserializes the weights blob, and caches the result.
-    Subsequent calls return the cached model if the version hasn't changed.
-    """
+
+async def load_active_model():
+    """Load the active model from local disk cache, Firebase Storage, or fallback."""
     global _cached_model, _cached_version
 
-    db = get_db()
-    active = await db.models.find_one(
-        {"status": "active"}, sort=[("createdAt", -1)]
-    )
-
-    if active is None:
-        raise RuntimeError("No active model found in database")
-
-    version = active["version"]
-
-    # Return cached model if version hasn't changed
-    if _cached_version == version and _cached_model is not None:
+    if _cached_model is not None:
         return _cached_model
 
-    logger.info("Loading model version %s from database", version)
-    _cached_model = deserialize_model(active["weightsBlob"])
-    _cached_version = version
+    db = get_firestore_db()
+    bucket = get_storage_bucket()
+
+    if db is not None:
+        try:
+            # Query active model record from Firestore without requiring a composite index
+            docs = (
+                db.collection("models")
+                .where(filter=firestore.FieldFilter("status", "==", "active"))
+                .get()
+            )
+
+            if docs:
+                # Sort in memory by createdAt descending
+                sorted_docs = sorted(
+                    docs,
+                    key=lambda d: d.to_dict().get("createdAt") or datetime.min.replace(tzinfo=timezone.utc),
+                    reverse=True,
+                )
+                active_doc = sorted_docs[0].to_dict()
+                version = active_doc.get("version", sorted_docs[0].id)
+                storage_path = active_doc.get("storagePath", f"models/model_{version}.zip")
+                local_cache_file = get_local_cache_path(version)
+
+                # 1. Check local disk cache first (fast start on Render / local)
+                if os.path.exists(local_cache_file):
+                    logger.info("Loaded active model %s from local disk cache (%s)", version, local_cache_file)
+                    with open(local_cache_file, "rb") as f:
+                        model_bytes = f.read()
+                # 2. Download from Firebase Storage if not cached locally
+                elif bucket is not None:
+                    logger.info("Downloading active model %s from Firebase Storage (%s)", version, storage_path)
+                    blob = bucket.blob(storage_path)
+                    model_bytes = blob.download_as_bytes()
+
+                    # Cache to disk for subsequent restarts
+                    try:
+                        with open(local_cache_file, "wb") as f:
+                            f.write(model_bytes)
+                        logger.info("Cached active model %s to local disk (%s)", version, local_cache_file)
+                    except Exception as err:
+                        logger.warning("Could not write to model disk cache: %s", str(err))
+                else:
+                    raise RuntimeError("Firebase Storage bucket unavailable and local cache missing.")
+
+                _cached_model = deserialize_model(model_bytes)
+                _cached_version = version
+                logger.info("Active model version %s loaded into memory", version)
+                return _cached_model
+            else:
+                raise RuntimeError("No active model record found in Firestore.")
+        except Exception as e:
+            logger.critical("CRITICAL: Failed to load active model from Firebase: %s", str(e))
+            if not settings.ALLOW_DUMMY_MODEL_FALLBACK:
+                raise RuntimeError(f"Classification model unavailable: {str(e)}")
+            
+            logger.warning("WARNING: Falling back to DummyModel due to ALLOW_DUMMY_MODEL_FALLBACK=True")
+
+    else:
+        logger.critical("CRITICAL: Firestore DB is not initialized.")
+        if not settings.ALLOW_DUMMY_MODEL_FALLBACK:
+            raise RuntimeError("Classification model unavailable: Firestore DB not initialized.")
+        
+        logger.warning("WARNING: Falling back to DummyModel due to ALLOW_DUMMY_MODEL_FALLBACK=True")
+
+    # In-memory fallback
+    logger.info("Using in-memory DummyModel fallback (version: dummy-v0)")
+    _cached_model = DummyModel()
+    _cached_version = "dummy-v0"
     return _cached_model
 
 
 async def save_model_version(model, metrics: dict, version: str) -> None:
-    """Persist a new model version to the database.
+    """Persist a new model version to Firebase Storage and Firestore."""
+    blob_bytes = serialize_model(model)
+    storage_path = f"models/model_{version}.zip"
 
-    New models are saved with status ``"candidate"`` — promotion to
-    ``"active"`` is an explicit admin action via PATCH /model/{version}/promote.
-    """
-    db = get_db()
-    blob = serialize_model(model)
-    await db.models.insert_one(
-        {
-            "version": version,
-            "weightsBlob": blob,
-            "metrics": metrics,
-            "status": "candidate",
-            "createdAt": datetime.now(timezone.utc),
-        }
-    )
-    logger.info("Saved model version %s as candidate", version)
+    # 1. Upload model zip archive to Firebase Storage
+    bucket = get_storage_bucket()
+    if bucket is not None:
+        try:
+            blob = bucket.blob(storage_path)
+            blob.upload_from_string(blob_bytes, content_type="application/zip")
+            logger.info("Uploaded model binary to Firebase Storage at %s", storage_path)
+        except Exception as e:
+            logger.error("Failed to upload model zip to Firebase Storage: %s", str(e))
+            raise
+
+    # 2. Save metadata document to Firebase Firestore
+    db = get_firestore_db()
+    if db is not None:
+        try:
+            db.collection("models").document(version).set(
+                {
+                    "version": version,
+                    "storagePath": storage_path,
+                    "metrics": metrics,
+                    "status": "candidate",
+                    "createdAt": datetime.now(timezone.utc),
+                }
+            )
+            logger.info("Saved model version %s record as candidate in Firestore", version)
+        except Exception as e:
+            logger.error("Failed to save model metadata in Firestore: %s", str(e))
+            raise
 
 
 async def promote_model_version(version: str) -> dict:
-    """Promote a candidate model to active, demoting the current active model.
+    """Promote a candidate model version to active in Firestore."""
+    db = get_firestore_db()
+    if db is None:
+        raise RuntimeError("Firebase Firestore is not initialized")
 
-    Returns the promoted model's metadata, or raises if the version is not found
-    or is not a candidate.
-    """
-    db = get_db()
+    doc_ref = db.collection("models").document(version)
+    doc = doc_ref.get()
 
-    # Find the candidate
-    candidate = await db.models.find_one({"version": version})
-    if candidate is None:
-        raise ValueError(f"Model version '{version}' not found")
-    if candidate["status"] == "active":
+    if not doc.exists:
+        raise ValueError(f"Model version '{version}' not found in Firestore")
+
+    data = doc.to_dict()
+    if data.get("status") == "active":
         raise ValueError(f"Model version '{version}' is already active")
 
-    # Demote current active model(s) to "inactive"
-    await db.models.update_many(
-        {"status": "active"},
-        {"$set": {"status": "inactive"}},
-    )
+    # Demote existing active models
+    # Demote existing active models
+    active_docs = db.collection("models").where(filter=firestore.FieldFilter("status", "==", "active")).get()
+    for active_doc in active_docs:
+        active_doc.reference.update({"status": "inactive"})
 
-    # Promote the candidate
-    await db.models.update_one(
-        {"version": version},
-        {"$set": {"status": "active"}},
-    )
+    # Promote target version
+    doc_ref.update({"status": "active"})
 
-    # Invalidate cache so next /classify call loads the new model
+    # Invalidate in-memory cache
     global _cached_model, _cached_version
     _cached_model = None
     _cached_version = None
 
-    logger.info("Promoted model version %s to active", version)
+    logger.info("Promoted model version %s to active in Firestore", version)
 
     return {
-        "version": candidate["version"],
-        "metrics": candidate.get("metrics", {}),
+        "version": version,
+        "metrics": data.get("metrics", {}),
         "status": "active",
     }
 
 
 async def get_active_model_metadata() -> dict:
-    """Return metadata for the active model (version, metrics, createdAt).
-
-    Does NOT return the raw weights blob — this is for the admin panel.
-    """
-    db = get_db()
-    active = await db.models.find_one(
-        {"status": "active"}, sort=[("createdAt", -1)]
-    )
-    if active is None:
-        return {"error": "No active model found", "version": None}
+    """Return metadata for the active model from Firestore."""
+    db = get_firestore_db()
+    if db is not None:
+        try:
+            docs = (
+                db.collection("models")
+                .where(filter=firestore.FieldFilter("status", "==", "active"))
+                .get()
+            )
+            if docs:
+                sorted_docs = sorted(
+                    docs,
+                    key=lambda d: d.to_dict().get("createdAt") or datetime.min.replace(tzinfo=timezone.utc),
+                    reverse=True,
+                )
+                data = sorted_docs[0].to_dict()
+                created_at = data.get("createdAt")
+                return {
+                    "version": data.get("version", sorted_docs[0].id),
+                    "metrics": data.get("metrics", {}),
+                    "createdAt": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
+                    "status": data.get("status", "active"),
+                }
+        except Exception as e:
+            logger.warning("Failed to fetch active model metadata from Firestore: %s", str(e))
 
     return {
-        "version": active["version"],
-        "metrics": active.get("metrics", {}),
-        "createdAt": active["createdAt"].isoformat()
-        if isinstance(active["createdAt"], datetime)
-        else str(active["createdAt"]),
-        "status": active["status"],
+        "version": _cached_version or "dummy-v0",
+        "metrics": {"note": "In-memory standalone fallback (Firebase model not uploaded yet)"},
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+        "status": "active",
     }

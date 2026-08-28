@@ -1,7 +1,7 @@
 """
 Tests for the /classify endpoint.
 
-Uses a monkeypatched model registry so no real MongoDB is needed.
+Uses a monkeypatched model registry so no real database is needed.
 """
 
 import pytest

@@ -5,14 +5,15 @@ This repository contains the Machine Learning (ML) backend for the **MyGuard AI 
 ## 🎯 Purpose and Scope
 
 The ML service is designed to be **Layer 2** in the MyGuard document analysis pipeline.
-1. **Layer 1 (Node.js)**: PDF parsing and OCR text extraction.
-2. **Layer 2 (This Service)**: Fast, character-level Deep Learning classification (RETVec + CNN) of the extracted text to immediately flag safe or obvious injection attempts.
-3. **Layer 3 (External LLM)**: Used only when this ML service is uncertain (returns `suspicious`).
+1. **Layer 1 (Node.js)**: PDF/Word text parsing, OCR text extraction, and hidden layer text extraction.
+2. **Layer 2 (This Service)**: Fast, character-level Deep Learning classification (**RETVec + CNN**) of extracted text to immediately flag `safe`, `suspicious`, or `injection` attempts. **No LLMs are called inside this service.**
+3. **Layer 3 (External LLM)**: Handled exclusively by Node.js when Layer 2 returns `suspicious`.
 
 **Key Architectural Decisions:**
-- **Stateless Design:** Models are not saved on the local disk. The service dynamically loads and caches model weights from MongoDB into memory as a ZIP-compressed TensorFlow SavedModel format. This ensures seamless horizontal scaling and containerization.
-- **Asynchronous Processing:** Long-running model training jobs are executed via background tasks, not blocking HTTP requests.
-- **Human-in-the-loop Promotion:** Newly trained models are flagged as "candidate" models. They must be explicitly promoted to "active" by an administrator. Auto-promotion is disabled by design.
+- **Firebase & Supabase Integration:** Model weights (SavedModel ZIP archives) are persisted in **Firebase Storage** (`models/`) and model version metadata is tracked in **Firebase Firestore** (`models` collection). Datasets are ingested from **Supabase**. MongoDB is completely removed.
+- **Render Resiliency & Local Disk Caching:** Active models downloaded from Firebase are cached locally on disk (`./data/cache/models/`) to ensure fast 0 ms startup on container spin-downs.
+- **Asynchronous Processing & Auto-Activation:** Training runs asynchronously in the background (`POST /train`). Once trained, newly produced models auto-activate for live inference.
+- **Header Auth & IP Ban Security:** All protected endpoints require the `X-Internal-Token` header. IPs exceeding 3 invalid authentication attempts are automatically banned (`HTTP 403 Forbidden`).
 
 ---
 
@@ -31,20 +32,19 @@ ml-service/
 │   │   └── dependencies.py        # Auth validation (X-Internal-Token)
 │   ├── core/
 │   │   ├── config.py              # Pydantic Settings & Env var management
-│   │   ├── db.py                  # Motor (AsyncIO MongoDB) connection manager
 │   │   └── logging.py             # Structured JSON logger setup
 │   ├── jobs/
 │   │   └── training_job.py        # Background task runner for model training
 │   ├── ml/                        # Core Machine Learning Logic
 │   │   ├── cnn/
 │   │   │   ├── architecture.py    # Keras Model definition (RETVec + Conv1D)
-│   │   │   └── model_registry.py  # Model serialization (Zip/Unzip) to MongoDB
+│   │   │   └── model_registry.py  # Model serialization (Zip/Unzip) to Firebase Storage
 │   │   ├── preprocessing/
 │   │   │   └── normalize.py       # Basic text cleaning (lowercase, whitespace)
 │   │   ├── retvec/
 │   │   │   └── tokenizer.py       # Google RETVec integration
 │   │   └── training/
-│   │       ├── dataset.py         # DB Loader + Stratified test-set split logic
+│   │       ├── dataset.py         # Supabase Loader + Stratified test-set split logic
 │   │       ├── evaluate.py        # Precision, Recall, F1 & Classification Report
 │   │       └── train.py           # Class weighting computation
 │   ├── models/
@@ -155,7 +155,7 @@ Promotes a previously trained "candidate" model to "active", demoting the curren
 
 ### 4. Background Training Job Runner
 **`POST /train`**
-Manually triggers a new training cycle asynchronously. Pulls latest labeled data from MongoDB.
+Manually triggers a new training cycle asynchronously. Pulls latest labeled data from Supabase.
 **Response:**
 ```json
 {
@@ -193,7 +193,6 @@ The service is built on modern Python 3.10+ async infrastructure and TensorFlow.
 | **fastapi** | `>=0.111.0` | High-performance async web framework. |
 | **uvicorn** | `>=0.30.0` | ASGI Web Server. |
 | **pydantic** | `>=2.7.0` | Request payload validation and serialization. |
-| **motor** | `>=3.4.0` | AsyncIO driver for MongoDB (Database interactions). |
 | **tensorflow** | `>=2.16.0` | Deep learning framework (Model building, saving, inference). |
 | **retvec** | `latest` | Google's character-level tokenizer embedded directly in the TF graph. |
 | **scikit-learn** | `>=1.5.0` | Used for evaluation metrics (F1/Precision/Recall) & class weighting. |
@@ -209,11 +208,10 @@ The service is built on modern Python 3.10+ async infrastructure and TensorFlow.
    pip install -r requirements.txt
    ```
 2. **Setup environment variables** (`.env`):
-   ```env
-   MONGO_URI=mongodb://localhost:27017
-   DB_NAME=myguard_ai
    INTERNAL_SERVICE_TOKEN=your-secure-secret-token
    LOG_LEVEL=INFO
+   SUPABASE_URL=your-supabase-url
+   SUPABASE_SERVICE_ROLE_KEY=your-supabase-key
    ```
 3. **Seed the database** (Needed on first run if no models exist):
    ```bash

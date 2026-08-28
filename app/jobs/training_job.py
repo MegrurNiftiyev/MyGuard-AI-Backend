@@ -2,8 +2,8 @@
 Background training job runner.
 
 Training is triggered by ``POST /train`` and runs asynchronously via
-FastAPI's ``BackgroundTasks``. Job status is tracked in ``db.training_jobs``
-(not in memory) so it survives service restarts.
+FastAPI's ``BackgroundTasks``. Job status is tracked in Firestore ``training_jobs``
+collection so it survives service restarts.
 
 Status transitions: ``queued → running → completed / failed``.
 """
@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 
 import numpy as np
 
-from app.core.db import get_db
+from app.core.firebase import get_firestore_db
 from app.core.logging import get_logger
 from app.ml.cnn.architecture import build_model
 from app.ml.training.dataset import load_labeled_dataset
@@ -25,26 +25,26 @@ logger = get_logger(__name__)
 
 
 async def run_training_job(job_id: str) -> None:
-    """Execute a full training run: load data → build model → train → evaluate → save.
+    """Execute a full training run: load data → build model → train → evaluate → save to Firebase.
 
-    Updates the job record in ``db.training_jobs`` at each stage.
-    On failure, the job is marked ``"failed"`` with the error message.
-
-    Args:
-        job_id: The unique job ID (matches ``_id`` in ``db.training_jobs``).
+    Updates the job record in Firestore ``training_jobs`` collection at each stage.
     """
-    db = get_db()
+    db = get_firestore_db()
 
     # Mark as running
-    await db.training_jobs.update_one(
-        {"_id": job_id},
-        {"$set": {"status": "running", "startedAt": datetime.now(timezone.utc)}},
-    )
+    if db is not None:
+        try:
+            db.collection("training_jobs").document(job_id).update(
+                {"status": "running", "startedAt": datetime.now(timezone.utc)}
+            )
+        except Exception as e:
+            logger.warning("Failed to update job %s running status in Firestore: %s", job_id, str(e))
+
     logger.info("Training job %s started", job_id)
 
     try:
-        # 1. Load dataset
-        logger.info("Loading labeled dataset…")
+        # 1. Load dataset from Supabase / raw storage
+        logger.info("Loading labeled dataset from Supabase…")
         (
             train_texts,
             train_labels,
@@ -83,22 +83,24 @@ async def run_training_job(job_id: str) -> None:
         logger.info("Evaluating on test set…")
         metrics = evaluate(model, test_texts, test_labels)
 
-        # 6. Save model version as "candidate"
+        # 6. Save model version to Firebase Storage & Firestore
         version = f"v{uuid.uuid4().hex[:8]}"
         await save_model_version(model, metrics, version)
 
-        # 7. Mark job as completed
-        await db.training_jobs.update_one(
-            {"_id": job_id},
-            {
-                "$set": {
-                    "status": "completed",
-                    "finishedAt": datetime.now(timezone.utc),
-                    "resultVersion": version,
-                    "metrics": metrics,
-                }
-            },
-        )
+        # 7. Mark job as completed in Firestore
+        if db is not None:
+            try:
+                db.collection("training_jobs").document(job_id).update(
+                    {
+                        "status": "completed",
+                        "finishedAt": datetime.now(timezone.utc),
+                        "resultVersion": version,
+                        "metrics": metrics,
+                    }
+                )
+            except Exception as e:
+                logger.warning("Failed to update job %s completion in Firestore: %s", job_id, str(e))
+
         logger.info(
             "Training job %s completed — model %s (F1: %.4f)",
             job_id,
@@ -108,13 +110,14 @@ async def run_training_job(job_id: str) -> None:
 
     except Exception as e:
         logger.exception("Training job %s failed: %s", job_id, e)
-        await db.training_jobs.update_one(
-            {"_id": job_id},
-            {
-                "$set": {
-                    "status": "failed",
-                    "finishedAt": datetime.now(timezone.utc),
-                    "error": str(e),
-                }
-            },
-        )
+        if db is not None:
+            try:
+                db.collection("training_jobs").document(job_id).update(
+                    {
+                        "status": "failed",
+                        "finishedAt": datetime.now(timezone.utc),
+                        "error": str(e),
+                    }
+                )
+            except Exception as err:
+                logger.error("Failed to update job %s error status in Firestore: %s", job_id, str(err))

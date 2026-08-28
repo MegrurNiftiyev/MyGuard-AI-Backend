@@ -7,10 +7,14 @@ Registers all routers and manages the DB connection lifecycle.
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.db import connect_db, close_db
+from app.core.config import settings
 from app.core.logging import setup_logging, get_logger
-from app.api.routes import classify, model_status, train
+from app.core.firebase import init_firebase
+from app.api.routes import classify, model_status, train, dataset
+
+from fastapi.responses import RedirectResponse
 
 logger = get_logger(__name__)
 
@@ -21,26 +25,26 @@ async def lifespan(app: FastAPI):
     # Startup
     setup_logging()
     logger.info("Starting ML service…")
-    await connect_db()
-    logger.info("Database connected")
 
-    # Optionally warm-load the active model so the first /classify call
-    # doesn't incur a cold-start penalty. Failures here are non-fatal.
+    # Initialize Firebase Admin SDK
+    init_firebase()
+
+    # Warm-load model (fetches active model from Firebase Storage/Firestore or uses DummyModel fallback)
     try:
         from app.ml.cnn.model_registry import load_active_model
 
-        await load_active_model()
-        logger.info("Active model pre-loaded into cache")
-    except RuntimeError:
-        logger.warning(
-            "No active model found on startup — /classify will fail until "
-            "a model is seeded or trained"
-        )
+        model = await load_active_model()
+        logger.info("Active model initialized successfully (cached)")
+    except Exception as e:
+        logger.warning("Active model initialization warning: %s", str(e))
+
+    logger.info("==================================================================")
+    logger.info("🚀 Swagger UI (Interactive API Docs): http://localhost:8000/docs")
+    logger.info("==================================================================")
 
     yield
 
     # Shutdown
-    await close_db()
     logger.info("ML service shut down")
 
 
@@ -52,12 +56,30 @@ app = FastAPI(
     ),
     version="0.1.0",
     lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+
+# CORS Middleware (Restricts origins to Render backend + Swagger UI / Localhost testing)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS_LIST,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Register routers
 app.include_router(classify.router)
 app.include_router(model_status.router)
 app.include_router(train.router)
+app.include_router(dataset.router)
+
+
+@app.get("/", include_in_schema=False)
+async def root():
+    """Redirect root path to interactive Swagger UI documentation."""
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/health", tags=["Health"])

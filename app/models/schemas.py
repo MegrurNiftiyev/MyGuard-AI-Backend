@@ -12,11 +12,15 @@ class ClassifyRequest(BaseModel):
     documentId: str = Field(..., description="ID of the document being classified")
     text: str = Field(
         ...,
-        description="Already-extracted text (from Node's PDF/OCR layer), not a file",
+        description="Primary extracted document text",
     )
-    language: str | None = Field(
+    ocrText: str | None = Field(
         default=None,
-        description="Optional language hint — RETVec doesn't require it",
+        description="Optional OCR-extracted text from document images",
+    )
+    hiddenText: str | None = Field(
+        default=None,
+        description="Optional hidden/invisible text extracted from file layers",
     )
 
 

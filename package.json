@@ -1,0 +1,9 @@
+{
+  "name": "myguard-ai-models",
+  "version": "1.0.0",
+  "description": "FastAPI ML Service for MyGuard AI",
+  "scripts": {
+    "dev": "venv\\Scripts\\python.exe -m uvicorn app.main:app --reload",
+    "start": "venv\\Scripts\\python.exe -m uvicorn app.main:app"
+  }
+}

@@ -1,7 +1,7 @@
 """
 Tests for Part 2 — training pipeline, endpoints, and utilities.
 
-Uses mocked DB and model so no real MongoDB or TensorFlow training is needed.
+Uses mocked DB and model so no real database or TensorFlow training is needed.
 """
 
 import pytest
