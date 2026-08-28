@@ -73,7 +73,6 @@ async def run_training_job(job_id: str) -> None:
         model.fit(
             train_texts,
             {"label": train_labels, "categories": train_categories},
-            class_weight={"label": class_weights},
             epochs=10,
             validation_split=0.1,
             verbose=1,

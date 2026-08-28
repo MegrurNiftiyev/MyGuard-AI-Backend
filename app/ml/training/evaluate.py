@@ -56,10 +56,12 @@ def evaluate(model, test_texts: np.ndarray, test_labels_onehot: np.ndarray) -> d
     )
 
     # Per-class report
+    # We dynamically determine labels to avoid ValueError if some classes are missing in test set
+    unique_labels = sorted(list(set(true_labels + pred_labels)))
     report = classification_report(
         true_labels,
         pred_labels,
-        target_names=LABEL_NAMES,
+        labels=unique_labels,
         output_dict=True,
         zero_division=0,
     )

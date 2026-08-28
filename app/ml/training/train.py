@@ -27,14 +27,22 @@ def get_class_weights(labels_onehot: np.ndarray) -> dict[int, float]:
         Dict mapping class index → weight, suitable for
         ``model.fit(..., class_weight={"label": weights})``.
     """
-    # Convert one-hot back to integer labels for sklearn
+    # Convert one-hot back to integer labels
     y_int = np.argmax(labels_onehot, axis=1)
     classes = np.arange(len(LABEL_NAMES))
 
-    weights = compute_class_weight(
-        class_weight="balanced", classes=classes, y=y_int
-    )
-    weight_dict = {int(cls): float(w) for cls, w in zip(classes, weights)}
+    # Calculate manually to avoid sklearn's ValueError if a class is entirely missing (e.g. during bootstrap)
+    total_samples = len(y_int)
+    num_classes = len(classes)
+    weight_dict = {}
+
+    for cls in classes:
+        cls_count = np.sum(y_int == cls)
+        if cls_count > 0:
+            weight = total_samples / (num_classes * cls_count)
+        else:
+            weight = 1.0  # default weight for missing classes
+        weight_dict[int(cls)] = float(weight)
 
     logger.info(
         "Class weights: %s",

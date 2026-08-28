@@ -219,7 +219,13 @@ async def save_model_version(model, metrics: dict, version: str) -> None:
     blob_bytes = serialize_model(model)
     storage_path = f"models/model_{version}.zip"
 
-    # 1. Upload model zip archive to Firebase Storage
+    # 1. Save locally to cache so it can be pushed and used locally
+    local_path = get_local_cache_path(version)
+    with open(local_path, "wb") as f:
+        f.write(blob_bytes)
+    logger.info("Saved model to local cache at %s", local_path)
+
+    # 2. Upload model zip archive to Firebase Storage
     bucket = get_storage_bucket()
     if bucket is not None:
         try:
@@ -228,7 +234,8 @@ async def save_model_version(model, metrics: dict, version: str) -> None:
             logger.info("Uploaded model binary to Firebase Storage at %s", storage_path)
         except Exception as e:
             logger.error("Failed to upload model zip to Firebase Storage: %s", str(e))
-            raise
+            # Continue anyway since it's saved locally
+
 
     # 2. Save metadata document to Firebase Firestore
     db = get_firestore_db()

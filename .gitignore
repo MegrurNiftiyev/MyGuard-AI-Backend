@@ -27,4 +27,4 @@ Thumbs.db
 
 # Project specific
 mygurad-firebase-admin.json
-data/
+data/raw/
