@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     # CORS / Origin Security
     ALLOWED_ORIGINS: str = Field(
-        default="https://myguard-backend-i4ll.onrender.com,http://localhost:8000,http://127.0.0.1:8000",
+        default="https://mygurad-backend-v2.onrender.com,http://localhost:8000,http://127.0.0.1:8000",
         description="Comma-separated allowed origins",
     )
 
