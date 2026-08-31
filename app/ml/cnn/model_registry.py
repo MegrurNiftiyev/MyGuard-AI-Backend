@@ -58,18 +58,11 @@ def serialize_model(model) -> bytes:
 
     tmp_dir = tempfile.mkdtemp(prefix="ml_model_")
     try:
-        save_path = os.path.join(tmp_dir, "saved_model")
+        save_path = os.path.join(tmp_dir, "model.keras")
         model.save(save_path)
 
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            for root, _dirs, files in os.walk(save_path):
-                for fname in files:
-                    abs_path = os.path.join(root, fname)
-                    arc_name = os.path.relpath(abs_path, save_path)
-                    zf.write(abs_path, arc_name)
-
-        return buf.getvalue()
+        with open(save_path, "rb") as f:
+            return f.read()
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -81,14 +74,15 @@ def deserialize_model(blob: bytes):
 
         tmp_dir = tempfile.mkdtemp(prefix="ml_model_load_")
         try:
-            save_path = os.path.join(tmp_dir, "saved_model")
-            os.makedirs(save_path, exist_ok=True)
+            save_path = os.path.join(tmp_dir, "model.keras")
+            with open(save_path, "wb") as f:
+                f.write(blob)
 
-            buf = io.BytesIO(blob)
-            with zipfile.ZipFile(buf, "r") as zf:
-                zf.extractall(save_path)
-
-            model = tf.keras.models.load_model(save_path)
+            from app.ml.cnn.architecture import RETVecTokenizer
+            model = tf.keras.models.load_model(
+                save_path,
+                custom_objects={'RETVecTokenizer': RETVecTokenizer}
+            )
             return model
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -132,7 +126,7 @@ def get_local_cache_path(version: str) -> str:
     """Return local disk cache file path for model version archive."""
     cache_dir = os.path.join(".", "data", "cache", "models")
     os.makedirs(cache_dir, exist_ok=True)
-    return os.path.join(cache_dir, f"model_{version}.zip")
+    return os.path.join(cache_dir, f"model_{version}.keras")
 
 
 async def load_active_model():
@@ -163,7 +157,7 @@ async def load_active_model():
                 )
                 active_doc = sorted_docs[0].to_dict()
                 version = active_doc.get("version", sorted_docs[0].id)
-                storage_path = active_doc.get("storagePath", f"models/model_{version}.zip")
+                storage_path = active_doc.get("storagePath", f"models/model_{version}.keras")
                 local_cache_file = get_local_cache_path(version)
 
                 # 1. Check local disk cache first (fast start on Render / local)
@@ -217,7 +211,7 @@ async def load_active_model():
 async def save_model_version(model, metrics: dict, version: str) -> None:
     """Persist a new model version to Firebase Storage and Firestore."""
     blob_bytes = serialize_model(model)
-    storage_path = f"models/model_{version}.zip"
+    storage_path = f"models/model_{version}.keras"
 
     # 1. Save locally to cache so it can be pushed and used locally
     local_path = get_local_cache_path(version)

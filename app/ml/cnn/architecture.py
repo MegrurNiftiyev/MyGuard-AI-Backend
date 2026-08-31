@@ -9,8 +9,14 @@ The RETVec tokenizer layer handles character-level embedding directly from
 raw text strings — no separate preprocessing step required.
 """
 
+import os
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
 import tensorflow as tf
-from tensorflow.keras import layers, Model
+try:
+    import tf_keras as keras
+    from tf_keras import layers, Model
+except ImportError:
+    from tensorflow.keras import layers, Model
 from retvec.tf import RETVecTokenizer
 
 
