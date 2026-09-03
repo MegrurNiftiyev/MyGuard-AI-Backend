@@ -1,18 +1,26 @@
 import os
 import sys
+import random
+import zipfile
+import docx
+import pypdf
+from pptx import Presentation
+import numpy as np
 
 os.environ["TF_USE_LEGACY_KERAS"] = "1"
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 sys.stdout.reconfigure(encoding='utf-8')
 
-import zipfile
-import docx
-import pypdf
-import numpy as np
+SEED = 42
+random.seed(SEED)
+np.random.seed(SEED)
+
 import tensorflow as tf
+tf.random.set_seed(SEED)
 
 from app.ml.cnn.architecture import build_model, LABEL_NAMES, CATEGORY_NAMES
 from app.ml.training.dataset import encode_labels, encode_categories
+from app.ml.training.train import get_class_weights
 from app.ml.preprocessing.chunking import chunk_text
 
 HELDOUT_TEST_FILES = {
@@ -32,7 +40,31 @@ HELDOUT_TEST_FILES = {
     ]
 }
 
-def extract_text(file_path):
+
+def extract_pptx(file_path: str) -> str:
+    """Extract slide paragraph text and notes text from PPTX files using python-pptx."""
+    try:
+        prs = Presentation(file_path)
+        parts = []
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if shape.has_text_frame:
+                    for para in shape.text_frame.paragraphs:
+                        line = "".join(run.text for run in para.runs)
+                        if line.strip():
+                            parts.append(line.strip())
+            if slide.has_notes_slide and slide.notes_slide.notes_text_frame:
+                note = slide.notes_slide.notes_text_frame.text
+                if note.strip():
+                    parts.append(note.strip())
+        return "\n".join(parts)
+    except Exception as e:
+        print(f"Warning reading PPTX {file_path}: {e}")
+        return ""
+
+
+def extract_text(file_path: str) -> str:
+    """Extract raw text from supported document formats (.docx, .pptx, .pdf, .zip, .txt)."""
     ext = os.path.splitext(file_path)[1].lower()
     text = ""
     try:
@@ -45,6 +77,8 @@ def extract_text(file_path):
                         if cell.text.strip():
                             parts.append(cell.text.strip())
             text = "\n".join(parts)
+        elif ext == ".pptx":
+            text = extract_pptx(file_path)
         elif ext == ".pdf":
             reader = pypdf.PdfReader(file_path)
             parts = []
@@ -65,30 +99,48 @@ def extract_text(file_path):
                         if os.path.exists(tmp_path):
                             os.remove(tmp_path)
                         parts.append(sub_text)
+                    elif name.endswith('.pptx'):
+                        tmp_path = os.path.join(os.path.dirname(file_path), "_tmp_extracted.pptx")
+                        with open(tmp_path, "wb") as f_out:
+                            f_out.write(z.read(name))
+                        sub_text = extract_text(tmp_path)
+                        if os.path.exists(tmp_path):
+                            os.remove(tmp_path)
+                        parts.append(sub_text)
                     elif name.endswith('.txt'):
                         parts.append(z.read(name).decode('utf-8', errors='ignore'))
             text = "\n".join(parts)
-        else:
+        elif ext == ".txt":
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 text = f.read()
+        else:
+            print(f"Skipping unsupported file extension {ext} for {file_path}")
+            return ""
     except Exception as e:
         print(f"Warning reading {file_path}: {e}")
     return text.strip()
 
 
+def split_documents(doc_ids: list[str], val_ratio: float = 0.15, seed: int = 42) -> tuple[set[str], set[str]]:
+    """Perform a document-level split of source document IDs into train and validation sets."""
+    rng = random.Random(seed)
+    unique_ids = list(dict.fromkeys(doc_ids))
+    rng.shuffle(unique_ids)
+    n_val = max(1, int(len(unique_ids) * val_ratio))
+    val_ids = set(unique_ids[:n_val])
+    train_ids = set(unique_ids[n_val:])
+    return train_ids, val_ids
 
-def load_real_dataset(raw_dir):
-    train_texts = []
-    train_labels = []
-    train_cats = []
 
+def load_real_dataset(raw_dir: str):
+    all_chunks = [] # [(doc_id, text_chunk, label, categories)]
+    all_doc_ids = []
     test_docs = []
 
     for category in ["benign", "injection"]:
         cat_dir = os.path.join(raw_dir, category)
         heldout_list = HELDOUT_TEST_FILES.get(category, [])
         label_str = "safe" if category == "benign" else "injection"
-        cat_labels = [] if category == "benign" else ["Instruction Override"]
 
         for fname in os.listdir(cat_dir):
             fpath = os.path.join(cat_dir, fname)
@@ -120,12 +172,13 @@ def load_real_dataset(raw_dir):
                     cats = ["Instruction Override"] if lbl == "injection" else []
 
                     words = line.split()
-                    if len(words) <= 50:
+                    if len(words) <= 60:
                         file_chunks.append((line, lbl, cats))
                     else:
-                        for c in chunk_text(line, chunk_size=50, overlap=20):
+                        for c in chunk_text(line):
                             file_chunks.append((c, lbl, cats))
-                
+
+                # Cap per-document safe chunks so long PDFs don't dominate the dataset
                 if len(file_chunks) > 100:
                     inj_chunks = [c for c in file_chunks if c[1] == "injection"]
                     safe_chunks = [c for c in file_chunks if c[1] == "safe"]
@@ -134,22 +187,46 @@ def load_real_dataset(raw_dir):
                     file_chunks = inj_chunks + (safe_chunks[::step][:needed_safe] if safe_chunks else [])
 
                 for text_chunk, lbl, cats in file_chunks:
-                    train_texts.append(text_chunk)
-                    train_labels.append(lbl)
-                    train_cats.append(cats)
+                    all_chunks.append((fname, text_chunk, lbl, cats))
+                    all_doc_ids.append(fname)
 
-    return train_texts, train_labels, train_cats, test_docs
+    # Document-level split
+    train_doc_ids, val_doc_ids = split_documents(all_doc_ids, val_ratio=0.15, seed=SEED)
+
+    train_tuples = [c for c in all_chunks if c[0] in train_doc_ids]
+    val_tuples = [c for c in all_chunks if c[0] in val_doc_ids]
+
+    # Shuffle training and validation chunks independently
+    rng = random.Random(SEED)
+    rng.shuffle(train_tuples)
+    rng.shuffle(val_tuples)
+
+    train_texts = [t[1] for t in train_tuples]
+    train_labels = [t[2] for t in train_tuples]
+    train_cats = [t[3] for t in train_tuples]
+
+    val_texts = [t[1] for t in val_tuples]
+    val_labels = [t[2] for t in val_tuples]
+    val_cats = [t[3] for t in val_tuples]
+
+    print(f"Document-level split: {len(train_doc_ids)} train docs ({len(train_texts)} chunks), {len(val_doc_ids)} val docs ({len(val_texts)} chunks)")
+
+    return (train_texts, train_labels, train_cats), (val_texts, val_labels, val_cats), test_docs
+
 
 def main():
     raw_dir = r"c:\Users\megru\Desktop\Programlar\Github\MyGurad-IDDA-Final_project\Ai-Models\data\raw"
     print("Reading real document dataset from data/raw...")
 
-    train_texts, train_labels, train_cats, test_docs = load_real_dataset(raw_dir)
+    (train_texts, train_labels, train_cats), (val_texts, val_labels, val_cats), test_docs = load_real_dataset(raw_dir)
 
     print(f"\n--- Dataset Loading Summary ---")
     print(f"Training text chunks extracted: {len(train_texts)}")
-    print(f"  - Safe (Benign) chunks: {train_labels.count('safe')}")
-    print(f"  - Injection chunks: {train_labels.count('injection')}")
+    print(f"  - Safe (Benign) train chunks: {train_labels.count('safe')}")
+    print(f"  - Injection train chunks: {train_labels.count('injection')}")
+    print(f"Validation text chunks extracted: {len(val_texts)}")
+    print(f"  - Safe (Benign) val chunks: {val_labels.count('safe')}")
+    print(f"  - Injection val chunks: {val_labels.count('injection')}")
     print(f"Held-out Test Files reserved: {len(test_docs)}")
     for td in test_docs:
         print(f"  * [{td['category'].upper()}] {td['filename']} ({len(td['text'])} chars)")
@@ -158,17 +235,25 @@ def main():
     Y_train_label = encode_labels(train_labels)
     Y_train_cats = encode_categories(train_cats, num_categories=len(CATEGORY_NAMES))
 
+    X_val = np.array([[t] for t in val_texts])
+    Y_val_label = encode_labels(val_labels)
+    Y_val_cats = encode_categories(val_cats, num_categories=len(CATEGORY_NAMES))
+
+    class_weights_dict = get_class_weights(Y_train_label)
+    sample_weights_label = np.array([class_weights_dict[int(np.argmax(y))] for y in Y_train_label], dtype=np.float32)
+
     print("\nBuilding RETVec + CNN Keras Classification Model...")
     model = build_model(sequence_length=128, num_categories=len(CATEGORY_NAMES))
     model.summary()
 
-    print("\nStarting Keras Model Training (5 Epochs, batch_size=128)...", flush=True)
+    print("\nStarting Keras Model Training (5 Epochs, batch_size=128, document-level validation)...", flush=True)
     history = model.fit(
         X_train,
         {"label": Y_train_label, "categories": Y_train_cats},
         epochs=5,
         batch_size=128,
-        validation_split=0.15,
+        validation_data=(X_val, {"label": Y_val_label, "categories": Y_val_cats}),
+        sample_weight={"label": sample_weights_label},
         verbose=1
     )
 
@@ -193,23 +278,29 @@ def main():
     for td in test_docs:
         raw_text = td["text"]
         lines = [l.strip() for l in raw_text.split("\n") if l.strip()]
-        chunk_inputs = np.array([[l] for l in lines])
+        chunks = []
+        for line in lines:
+            words = line.split()
+            if len(words) <= 60:
+                chunks.append(line)
+            else:
+                chunks.extend(chunk_text(line))
+
+        chunk_inputs = np.array([[c] for c in chunks])
         
         preds = model.predict(chunk_inputs, verbose=0)
         label_preds = preds[0] # shape (N, 3) -> [safe, suspicious, injection]
 
-        max_inj_idx = np.argmax(label_preds[:, 2])
-        max_injection_prob = float(label_preds[max_inj_idx, 2])
-        max_inj_line = lines[max_inj_idx] if lines else ""
+        label_idx = label_preds.argmax(axis=1) # per-chunk argmax
+        worst_chunk_idx = label_preds[:, 2].argmax()
+        max_injection_prob = float(label_preds[worst_chunk_idx, 2])
+        max_inj_line = chunks[worst_chunk_idx] if chunks else ""
 
         avg_probs = np.mean(label_preds, axis=0)
 
-        if max_injection_prob > 0.45 or avg_probs[2] > 0.35:
-            predicted_label = "injection"
-        elif avg_probs[1] > 0.35:
-            predicted_label = "suspicious"
-        else:
-            predicted_label = "safe"
+        # Pure argmax-based worst-chunk-wins prediction logic
+        final_label_idx = 2 if 2 in label_idx else (1 if 1 in label_idx else 0)
+        predicted_label = LABEL_NAMES[final_label_idx]
 
         is_correct = (predicted_label == td["expected_label"])
         if is_correct:
@@ -235,56 +326,6 @@ def main():
     accuracy = (correct_predictions / len(test_docs)) * 100 if test_docs else 0.0
     print(f"Final Held-Out Test Accuracy: {accuracy:.2f}% ({correct_predictions}/{len(test_docs)})")
 
-    report_path = r"c:\Users\megru\Desktop\Programlar\Github\MyGurad-IDDA-Final_project\Ai-Models\REAL_DATASET_TRAINING_REPORT.md"
-    report_content = f"""# Real Dataset RETVec+CNN Keras Model Training & Test Evaluation Report
-
-## 1. Overview
-- **Framework**: TensorFlow / Keras (RETVec + 1D CNN Architecture)
-- **Saved Model File**: `data/models/retvec_cnn_model.keras`
-- **Training Source**: `data/raw/benign` & `data/raw/injection`
-- **Total Training Chunks**: {len(train_texts)} ({train_labels.count('safe')} safe, {train_labels.count('injection')} injection)
-- **Held-Out Test Set**: {len(test_docs)} files reserved for zero-data-leakage testing.
-- **Git Push Status**: NOT PUSHED (Kept strictly on local workspace as requested).
-
----
-
-## 2. Model Training Metrics
-- **Epochs**: 15
-- **Final Training Accuracy (Label Head)**: {history.history['label_accuracy'][-1]:.4f}
-- **Final Validation Accuracy (Label Head)**: {history.history['val_label_accuracy'][-1]:.4f}
-- **Final Training Loss**: {history.history['loss'][-1]:.4f}
-
----
-
-## 3. Held-Out Test Files Evaluation (Real World Simulation)
-
-### Overall Performance Summary
-- **Total Test Files**: {len(test_docs)}
-- **Correctly Classified**: {correct_predictions}
-- **Test Accuracy**: **{accuracy:.2f}%**
-
-### Detailed Per-File Predictions
-
-| File Name | Expected Category | Predicted Label | Result | Safe Prob | Suspicious Prob | Injection Prob | Max Chunk Inj |
-|---|---|---|---|---|---|---|---|
-"""
-    for r in test_results:
-        status_str = "✓ PASSED" if r['is_correct'] else "✗ FAILED"
-        report_content += f"| `{r['filename']}` | `{r['expected']}` | `{r['predicted']}` | **{status_str}** | {r['prob_safe']:.2%} | {r['prob_suspicious']:.2%} | {r['prob_injection']:.2%} | {r['max_chunk_injection']:.2%} |\n"
-
-    report_content += """
----
-
-## 4. Conclusion & Verification
-1. **Model Persistence**: The model was successfully trained using Keras and saved as a standalone `.keras` model file.
-2. **Detection Capability**: The RETVec character-level CNN model successfully identified hidden prompt injection strings inside Azerbaijani and English document files.
-3. **Local Safety**: No git commit/push actions were performed.
-"""
-
-    with open(report_path, "w", encoding="utf-8") as f:
-        f.write(report_content)
-
-    print(f"\nDetailed evaluation report saved to:\n  {report_path}")
 
 if __name__ == "__main__":
     main()

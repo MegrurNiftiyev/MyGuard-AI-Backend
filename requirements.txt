@@ -10,6 +10,9 @@ tensorflow>=2.16.0
 retvec
 scikit-learn>=1.5.0
 numpy>=1.26.0
+python-pptx>=1.0.0
+python-docx>=1.1.0
+pypdf>=4.2.0
 
 # Supabase / Dataset Pipeline
 supabase>=2.3.0
