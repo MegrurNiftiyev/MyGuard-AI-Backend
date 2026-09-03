@@ -13,17 +13,22 @@ import tensorflow as tf
 
 from app.ml.cnn.architecture import build_model, LABEL_NAMES, CATEGORY_NAMES
 from app.ml.training.dataset import encode_labels, encode_categories
+from app.ml.preprocessing.chunking import chunk_text
 
 HELDOUT_TEST_FILES = {
     "benign": [
         "09_resmi_mektub_temiz.docx",
         "10_iclas_protokolu_temiz.docx",
-        "Monthly Financial Expense Report.pdf"
+        "Monthly Financial Expense Report.pdf",
+        "11_ezamiyye_emri_temiz.docx",
+        "19_sifaris_senedi_temiz.docx"
     ],
     "injection": [
+        "01_Aylıq_Fəaliyyət_Hesabatı.docx",
         "16_ezamiyye_xercleri_injection_gizli.docx",
         "19_sifaris_senedi_problem.docx",
-        "01_Aylıq_Fəaliyyət_Hesabatı.docx"
+        "23_bank_zemanet_mektubu_injection_context_hijack.docx",
+        "24_qebul_tehvil_akti_injection.docx"
     ]
 }
 
@@ -70,20 +75,7 @@ def extract_text(file_path):
         print(f"Warning reading {file_path}: {e}")
     return text.strip()
 
-def chunk_text(text, chunk_size=60, overlap=30):
-    lines = [line.strip() for line in text.split("\n") if line.strip()]
-    chunks = []
-    for line in lines:
-        words = line.split()
-        if len(words) <= chunk_size:
-            chunks.append(line)
-        else:
-            i = 0
-            while i < len(words):
-                c = " ".join(words[i:i + chunk_size])
-                chunks.append(c)
-                i += chunk_size - overlap
-    return chunks
+
 
 def load_real_dataset(raw_dir):
     train_texts = []
@@ -115,9 +107,9 @@ def load_real_dataset(raw_dir):
                     "text": extracted
                 })
             else:
+                file_chunks = []
                 lines = [l.strip() for l in extracted.split("\n") if l.strip()]
                 for line in lines:
-                    # Check if line is specifically an injection payload in an injection document
                     is_inj_line = False
                     if category == "injection":
                         low = line.lower()
@@ -129,14 +121,22 @@ def load_real_dataset(raw_dir):
 
                     words = line.split()
                     if len(words) <= 50:
-                        train_texts.append(line)
-                        train_labels.append(lbl)
-                        train_cats.append(cats)
+                        file_chunks.append((line, lbl, cats))
                     else:
                         for c in chunk_text(line, chunk_size=50, overlap=20):
-                            train_texts.append(c)
-                            train_labels.append(lbl)
-                            train_cats.append(cats)
+                            file_chunks.append((c, lbl, cats))
+                
+                if len(file_chunks) > 100:
+                    inj_chunks = [c for c in file_chunks if c[1] == "injection"]
+                    safe_chunks = [c for c in file_chunks if c[1] == "safe"]
+                    needed_safe = max(10, 100 - len(inj_chunks))
+                    step = max(1, len(safe_chunks) // needed_safe) if safe_chunks else 1
+                    file_chunks = inj_chunks + (safe_chunks[::step][:needed_safe] if safe_chunks else [])
+
+                for text_chunk, lbl, cats in file_chunks:
+                    train_texts.append(text_chunk)
+                    train_labels.append(lbl)
+                    train_cats.append(cats)
 
     return train_texts, train_labels, train_cats, test_docs
 
@@ -162,12 +162,12 @@ def main():
     model = build_model(sequence_length=128, num_categories=len(CATEGORY_NAMES))
     model.summary()
 
-    print("\nStarting Keras Model Training (15 Epochs)...")
+    print("\nStarting Keras Model Training (5 Epochs, batch_size=128)...", flush=True)
     history = model.fit(
         X_train,
         {"label": Y_train_label, "categories": Y_train_cats},
-        epochs=15,
-        batch_size=8,
+        epochs=5,
+        batch_size=128,
         validation_split=0.15,
         verbose=1
     )

@@ -278,7 +278,7 @@ async def test_classify_still_works_with_dummy(auth_headers):
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
                 "/classify",
-                json={"documentId": "doc-123", "text": "normal document"},
+                json={"documentId": "doc-123", "fullText": "normal document containing enough words for test"},
                 headers=auth_headers,
             )
 

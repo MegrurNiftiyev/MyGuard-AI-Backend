@@ -1,7 +1,5 @@
 """
-Tests for the /classify endpoint.
-
-Uses a monkeypatched model registry so no real database is needed.
+Tests for the /classify endpoint with fullText schema & chunk prediction.
 """
 
 import pytest
@@ -18,10 +16,9 @@ def auth_headers():
     return {"X-Internal-Token": "test-secret"}
 
 
-
 @pytest.mark.asyncio
 async def test_classify_returns_prediction(auth_headers):
-    """POST /classify should return a valid ClassifyResponse."""
+    """POST /classify should return a valid ClassifyResponse for fullText."""
     dummy = DummyModel()
 
     with patch(
@@ -35,7 +32,7 @@ async def test_classify_returns_prediction(auth_headers):
                 "/classify",
                 json={
                     "documentId": "doc-123",
-                    "text": "This is a normal document with standard content.",
+                    "fullText": "This is a normal corporate document with standard operational content.",
                 },
                 headers=auth_headers,
             )
@@ -61,10 +58,12 @@ async def test_classify_rejects_missing_auth():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
                 "/classify",
-                json={"documentId": "doc-123", "text": "test"},
+                json={
+                    "documentId": "doc-123",
+                    "fullText": "Sample text for testing authentication validation.",
+                },
             )
 
-    # FastAPI returns 422 for missing required header
     assert response.status_code in (401, 422)
 
 
@@ -82,7 +81,10 @@ async def test_classify_rejects_wrong_token():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
                 "/classify",
-                json={"documentId": "doc-123", "text": "test"},
+                json={
+                    "documentId": "doc-123",
+                    "fullText": "Sample text for testing invalid token handling.",
+                },
                 headers={"X-Internal-Token": "wrong-secret"},
             )
 
@@ -90,14 +92,52 @@ async def test_classify_rejects_wrong_token():
 
 
 @pytest.mark.asyncio
-async def test_classify_normalizes_text(auth_headers):
-    """Verify that text normalization is applied before prediction."""
+async def test_classify_rejects_insufficient_text(auth_headers):
+    """Verify that fullText under 5 words raises 503 insufficient_text."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/classify",
+            json={
+                "documentId": "doc-short",
+                "fullText": "One two three four",  # 4 words
+            },
+            headers=auth_headers,
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "insufficient_text"
+
+
+@pytest.mark.asyncio
+async def test_classify_rejects_extra_legacy_fields(auth_headers):
+    """Verify that extra legacy fields (text, ocrText, hiddenText) are rejected (422)."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/classify",
+            json={
+                "documentId": "doc-legacy",
+                "fullText": "This is valid text containing enough words for test.",
+                "text": "Legacy text field that should be forbidden",
+            },
+            headers=auth_headers,
+        )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_classify_passes_raw_full_text(auth_headers):
+    """Verify raw fullText is passed directly to run_prediction."""
     dummy = DummyModel()
     captured_texts = []
 
     def capturing_run_prediction(model, text):
         captured_texts.append(text)
         return ("safe", 0.99, [])
+
+    raw_input_text = "  Hello   WORLD\nLine two of document.\nLine three of document text."
 
     with patch(
         "app.api.routes.classify.load_active_model",
@@ -109,15 +149,14 @@ async def test_classify_normalizes_text(auth_headers):
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            await client.post(
+            res = await client.post(
                 "/classify",
                 json={
-                    "documentId": "doc-456",
-                    "text": "  Hello   WORLD\n\ttest  ",
+                    "documentId": "doc-raw",
+                    "fullText": raw_input_text,
                 },
                 headers=auth_headers,
             )
 
-    # basic_normalize: lowercase + collapse whitespace + strip
-    assert captured_texts[0] == "hello world test"
-
+    assert res.status_code == 200
+    assert captured_texts[0] == raw_input_text

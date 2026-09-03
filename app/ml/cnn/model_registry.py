@@ -94,25 +94,34 @@ def deserialize_model(blob: bytes):
 # Prediction adapter
 # ---------------------------------------------------------------------------
 def run_prediction(model, text: str) -> tuple[str, float, list[str]]:
-    """Run prediction on a single text and return (label, confidence, categories)."""
+    """Run chunk-based prediction on full text and return (label, confidence, categories)."""
     from app.ml.cnn.architecture import LABEL_NAMES, CATEGORY_NAMES
+    from app.ml.preprocessing.chunking import chunk_text
 
     if isinstance(model, DummyModel):
         return model.predict(text)
 
-    input_array = np.array([[text]])
-    predictions = model.predict(input_array, verbose=0)
+    chunks = chunk_text(text)
+    if not chunks:
+        return ("safe", 0.0, [])
 
-    label_probs = predictions[0][0]
-    category_probs = predictions[1][0]
+    chunk_inputs = np.array([[c] for c in chunks])
+    predictions = model.predict(chunk_inputs, verbose=0)
 
-    label_idx = int(np.argmax(label_probs))
-    label = LABEL_NAMES[label_idx]
-    confidence = float(label_probs[label_idx])
+    label_probs = predictions[0]  # shape (N, 3): [safe, suspicious, injection]
+    cat_probs = predictions[1]    # shape (N, num_categories)
+
+    label_idx = label_probs.argmax(axis=1)  # argmax per chunk
+    worst_chunk_idx = int(label_probs[:, 2].argmax())  # chunk with highest injection probability
+
+    final_label_idx = 2 if 2 in label_idx else (1 if 1 in label_idx else 0)
+    label = LABEL_NAMES[final_label_idx]
+
+    confidence = float(label_probs[worst_chunk_idx, final_label_idx])
 
     categories = [
         CATEGORY_NAMES[i]
-        for i, p in enumerate(category_probs)
+        for i, p in enumerate(cat_probs[worst_chunk_idx])
         if p >= 0.5 and i < len(CATEGORY_NAMES)
     ]
 

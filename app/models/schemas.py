@@ -9,18 +9,12 @@ from typing import Literal
 class ClassifyRequest(BaseModel):
     """Payload sent by the Node.js backend for document classification."""
 
+    model_config = {"extra": "forbid"}
+
     documentId: str = Field(..., description="ID of the document being classified")
-    text: str = Field(
+    fullText: str = Field(
         ...,
-        description="Primary extracted document text",
-    )
-    ocrText: str | None = Field(
-        default=None,
-        description="Optional OCR-extracted text from document images",
-    )
-    hiddenText: str | None = Field(
-        default=None,
-        description="Optional hidden/invisible text extracted from file layers",
+        description="Full extracted document text matching training input shape",
     )
 
 
