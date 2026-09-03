@@ -283,6 +283,8 @@ To guarantee resiliency and fast container startup on platforms like Render:
 
 Authentication requires the `X-Internal-Token` header for all protected routes.
 
+![MyGuard ML Service Swagger API Documentation](docs/images/swagger_api_docs.png)
+
 ### 1. Liveness & Health Probe (`/health`)
 
 #### `GET /health`

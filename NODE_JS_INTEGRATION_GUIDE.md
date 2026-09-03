@@ -32,6 +32,8 @@ X-Internal-Token: <YOUR_INTERNAL_SERVICE_TOKEN>
 
 **Vacib Qeyd:** Aşağıdakı endpointlərin hər biri (Health xaric) mütləq şəkildə Node.js tərəfindən **`X-Internal-Token`** header-i ilə çağırılmalıdır. Token göndərilmədikdə və ya səhv göndərildikdə, server avtomatik olaraq Node.js-i bloklayacaq. 
 
+![MyGuard ML Service Swagger API Documentation](docs/images/swagger_api_docs.png) 
+
 ---
 
 ### 1. Document Text Classification — `POST /classify`
