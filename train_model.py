@@ -216,7 +216,7 @@ def load_real_dataset(raw_dir: str):
 
 def main():
     raw_dir = r"c:\Users\megru\Desktop\Programlar\Github\MyGurad-IDDA-Final_project\Ai-Models\data\raw"
-    print("Reading real document dataset from data/raw...")
+    print("Reading document dataset from data/raw...")
 
     (train_texts, train_labels, train_cats), (val_texts, val_labels, val_cats), test_docs = load_real_dataset(raw_dir)
 

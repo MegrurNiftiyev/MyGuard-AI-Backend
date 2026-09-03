@@ -158,7 +158,7 @@ In enterprise security gateways, **a False Negative (missing a malicious injecti
 ## 📊 Dataset Processing, Extraction Pipeline & Real Evaluation
 
 ### 1. Document Extraction & Multi-Format Ingestion
-The dataset pipeline (`train_real_model.py` and `app/services/supabase_dataset.py`) handles structured parsing across multiple document formats:
+The dataset pipeline (`train_model.py` and `app/services/supabase_dataset.py`) handles structured parsing across multiple document formats:
 - **Microsoft Word (`.docx`)**: Parsed paragraph-by-paragraph and cell-by-cell across nested tables (`python-docx`).
 - **Adobe PDF (`.pdf`)**: Internal structural text stream extraction (`pypdf`).
 - **Archive Packages (`.zip`)**: Recursive decompression and text stream extraction.
@@ -449,9 +449,9 @@ Ai-Models
 ├── README.md                   # Primary documentation
 ├── REAL_DATASET_TRAINING_REPORT.md # Training report & metric log
 ├── requirements.txt            # Python package dependencies
-├── train_real_model.py         # Standalone model training & evaluation script
+├── train_model.py              # Standalone model training & evaluation script
 ├── generate_dataset.py         # Synthetic/Real dataset generation utility
-├── seed_dummy_model.py         # Bootstrapping script for dummy model initialization
+├── seed_model.py               # Bootstrapping script for base model initialization
 ├── push_to_firebase.py         # Script to push local model to Firebase Storage
 ├── test_extraction.py          # Document text extraction validation test
 ├── app/
@@ -548,9 +548,9 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-### 4. Bootstrap Dummy Model (Optional for local testing)
+### 4. Bootstrap Model (Optional for local testing)
 ```bash
-python seed_dummy_model.py
+python seed_model.py
 ```
 
 ### 5. Run FastAPI Application locally
@@ -559,9 +559,9 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 Interactive Swagger UI will be available at: `http://localhost:8000/docs`
 
-### 6. Train Real Model locally
+### 6. Train Model on Dataset
 ```bash
-python train_real_model.py
+python train_model.py
 ```
 
 ### 7. Run Container with Docker
