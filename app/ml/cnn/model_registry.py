@@ -210,6 +210,26 @@ async def load_active_model():
         
         logger.warning("WARNING: Falling back to DummyModel due to ALLOW_DUMMY_MODEL_FALLBACK=True")
 
+    # Check if a real trained model exists on local disk
+    local_paths = [
+        os.path.join(".", "data", "models", "retvec_cnn_model.keras"),
+        os.path.join(".", "data", "cache", "active_model.keras"),
+    ]
+    for lp in local_paths:
+        if os.path.exists(lp):
+            try:
+                import tensorflow as tf
+                from app.ml.cnn.architecture import RETVecTokenizer
+                model = tf.keras.models.load_model(
+                    lp, custom_objects={"RETVecTokenizer": RETVecTokenizer}
+                )
+                _cached_model = model
+                _cached_version = "real-local-v1"
+                logger.info("Loaded active trained model from local disk (%s)", lp)
+                return _cached_model
+            except Exception as e:
+                logger.warning("Could not load local model from %s: %s", lp, str(e))
+
     # In-memory fallback
     logger.info("Using in-memory DummyModel fallback (version: dummy-v0)")
     _cached_model = DummyModel()
