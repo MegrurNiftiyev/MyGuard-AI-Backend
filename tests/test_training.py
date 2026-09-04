@@ -13,7 +13,6 @@ from app.main import app
 from app.ml.cnn.model_registry import DummyModel
 from app.ml.training.dataset import (
     encode_labels,
-    encode_categories,
     stratified_split_with_test_ratio_override,
 )
 from app.ml.training.evaluate import decode_predictions
@@ -54,33 +53,6 @@ class TestEncodeLabels:
         labels = ["unknown"]
         encoded = encode_labels(labels)
         np.testing.assert_array_equal(encoded[0], [1, 0, 0])
-
-
-class TestEncodeCategories:
-    """Test multi-hot category encoding."""
-
-    def test_single_category(self):
-        cats = [["Instruction Override"]]
-        encoded = encode_categories(cats)
-        assert encoded.shape == (1, 6)
-        assert encoded[0, 0] == 1.0  # Instruction Override is index 0
-        assert encoded[0, 1:].sum() == 0.0
-
-    def test_multiple_categories(self):
-        cats = [["Instruction Override", "Data Exfiltration"]]
-        encoded = encode_categories(cats)
-        assert encoded[0, 0] == 1.0  # Instruction Override
-        assert encoded[0, 2] == 1.0  # Data Exfiltration
-
-    def test_empty_categories(self):
-        cats = [[]]
-        encoded = encode_categories(cats)
-        assert encoded.sum() == 0.0
-
-    def test_unknown_category_ignored(self):
-        cats = [["Not A Real Category"]]
-        encoded = encode_categories(cats)
-        assert encoded.sum() == 0.0
 
 
 # ───────────────── Stratified split ─────────────────

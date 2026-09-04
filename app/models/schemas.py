@@ -27,10 +27,6 @@ class ClassifyResponse(BaseModel):
     confidence: float = Field(
         ..., ge=0.0, le=1.0, description="Model confidence score"
     )
-    categories: list[str] = Field(
-        default_factory=list,
-        description='Detected attack categories, e.g. ["Instruction Override", "Ranking Manipulation"]',
-    )
 
 
 class ModelMetadataResponse(BaseModel):

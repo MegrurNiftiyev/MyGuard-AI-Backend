@@ -18,8 +18,8 @@ np.random.seed(SEED)
 import tensorflow as tf
 tf.random.set_seed(SEED)
 
-from app.ml.cnn.architecture import build_model, LABEL_NAMES, CATEGORY_NAMES
-from app.ml.training.dataset import encode_labels, encode_categories
+from app.ml.cnn.architecture import build_model, LABEL_NAMES
+from app.ml.training.dataset import encode_labels
 from app.ml.training.train import get_class_weights
 from app.ml.preprocessing.chunking import chunk_text
 
@@ -169,14 +169,13 @@ def load_real_dataset(raw_dir: str):
                             is_inj_line = True
                     
                     lbl = "injection" if (category == "injection" and is_inj_line) else ("injection" if category == "injection" else "safe")
-                    cats = ["Instruction Override"] if lbl == "injection" else []
 
                     words = line.split()
                     if len(words) <= 60:
-                        file_chunks.append((line, lbl, cats))
+                        file_chunks.append((line, lbl))
                     else:
                         for c in chunk_text(line):
-                            file_chunks.append((c, lbl, cats))
+                            file_chunks.append((c, lbl))
 
                 # Cap per-document safe chunks so long PDFs don't dominate the dataset
                 if len(file_chunks) > 100:
@@ -186,8 +185,8 @@ def load_real_dataset(raw_dir: str):
                     step = max(1, len(safe_chunks) // needed_safe) if safe_chunks else 1
                     file_chunks = inj_chunks + (safe_chunks[::step][:needed_safe] if safe_chunks else [])
 
-                for text_chunk, lbl, cats in file_chunks:
-                    all_chunks.append((fname, text_chunk, lbl, cats))
+                for text_chunk, lbl in file_chunks:
+                    all_chunks.append((fname, text_chunk, lbl))
                     all_doc_ids.append(fname)
 
     # Document-level split
@@ -203,22 +202,20 @@ def load_real_dataset(raw_dir: str):
 
     train_texts = [t[1] for t in train_tuples]
     train_labels = [t[2] for t in train_tuples]
-    train_cats = [t[3] for t in train_tuples]
 
     val_texts = [t[1] for t in val_tuples]
     val_labels = [t[2] for t in val_tuples]
-    val_cats = [t[3] for t in val_tuples]
 
     print(f"Document-level split: {len(train_doc_ids)} train docs ({len(train_texts)} chunks), {len(val_doc_ids)} val docs ({len(val_texts)} chunks)")
 
-    return (train_texts, train_labels, train_cats), (val_texts, val_labels, val_cats), test_docs
+    return (train_texts, train_labels), (val_texts, val_labels), test_docs
 
 
 def main():
     raw_dir = r"c:\Users\megru\Desktop\Programlar\Github\MyGurad-IDDA-Final_project\Ai-Models\data\raw"
     print("Reading document dataset from data/raw...")
 
-    (train_texts, train_labels, train_cats), (val_texts, val_labels, val_cats), test_docs = load_real_dataset(raw_dir)
+    (train_texts, train_labels), (val_texts, val_labels), test_docs = load_real_dataset(raw_dir)
 
     print(f"\n--- Dataset Loading Summary ---")
     print(f"Training text chunks extracted: {len(train_texts)}")
@@ -233,27 +230,25 @@ def main():
 
     X_train = np.array([[t] for t in train_texts])
     Y_train_label = encode_labels(train_labels)
-    Y_train_cats = encode_categories(train_cats, num_categories=len(CATEGORY_NAMES))
 
     X_val = np.array([[t] for t in val_texts])
     Y_val_label = encode_labels(val_labels)
-    Y_val_cats = encode_categories(val_cats, num_categories=len(CATEGORY_NAMES))
 
     class_weights_dict = get_class_weights(Y_train_label)
     sample_weights_label = np.array([class_weights_dict[int(np.argmax(y))] for y in Y_train_label], dtype=np.float32)
 
     print("\nBuilding RETVec + CNN Keras Classification Model...")
-    model = build_model(sequence_length=128, num_categories=len(CATEGORY_NAMES))
+    model = build_model(sequence_length=128)
     model.summary()
 
     print("\nStarting Keras Model Training (5 Epochs, batch_size=128, document-level validation)...", flush=True)
     history = model.fit(
         X_train,
-        {"label": Y_train_label, "categories": Y_train_cats},
+        Y_train_label,
         epochs=5,
         batch_size=128,
-        validation_data=(X_val, {"label": Y_val_label, "categories": Y_val_cats}),
-        sample_weight={"label": sample_weights_label},
+        validation_data=(X_val, Y_val_label),
+        sample_weight=sample_weights_label,
         verbose=1
     )
 
@@ -289,7 +284,7 @@ def main():
         chunk_inputs = np.array([[c] for c in chunks])
         
         preds = model.predict(chunk_inputs, verbose=0)
-        label_preds = preds[0] # shape (N, 3) -> [safe, suspicious, injection]
+        label_preds = preds if isinstance(preds, np.ndarray) and preds.ndim == 2 else preds[0]
 
         label_idx = label_preds.argmax(axis=1) # per-chunk argmax
         worst_chunk_idx = label_preds[:, 2].argmax()

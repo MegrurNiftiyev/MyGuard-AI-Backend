@@ -41,7 +41,6 @@ async def test_classify_returns_prediction(auth_headers):
     data = response.json()
     assert data["label"] in ("safe", "suspicious", "injection")
     assert 0.0 <= data["confidence"] <= 1.0
-    assert isinstance(data["categories"], list)
 
 
 @pytest.mark.asyncio
@@ -135,7 +134,7 @@ async def test_classify_passes_raw_full_text(auth_headers):
 
     def capturing_run_prediction(model, text):
         captured_texts.append(text)
-        return ("safe", 0.99, [])
+        return ("safe", 0.99)
 
     raw_input_text = "  Hello   WORLD\nLine two of document.\nLine three of document text."
 

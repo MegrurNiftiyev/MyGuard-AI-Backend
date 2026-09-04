@@ -44,7 +44,7 @@ async def classify(
             detail={"error": "Classification model unavailable", "detail": str(e)}
         )
 
-    label, confidence, categories = run_prediction(model, req.fullText)
+    label, confidence = run_prediction(model, req.fullText)
 
     logger.info(
         "Classified document %s (length: %d chars, words: %d) → %s (confidence: %.2f)",
@@ -56,5 +56,5 @@ async def classify(
     )
 
     return ClassifyResponse(
-        label=label, confidence=confidence, categories=categories
+        label=label, confidence=confidence
     )

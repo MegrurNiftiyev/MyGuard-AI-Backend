@@ -18,14 +18,13 @@ class TestDummyModel:
         model = DummyModel()
         result = model.predict("some text")
         assert isinstance(result, tuple)
-        assert len(result) == 3
+        assert len(result) == 2
 
     def test_predict_label(self):
         model = DummyModel()
-        label, confidence, categories = model.predict("anything")
+        label, confidence = model.predict("anything")
         assert label == "safe"
         assert isinstance(confidence, float)
-        assert isinstance(categories, list)
 
 
 class TestSerialization:
@@ -40,7 +39,7 @@ class TestSerialization:
         assert isinstance(restored, DummyModel)
 
         # Verify the restored model still works
-        label, confidence, categories = restored.predict("test")
+        label, confidence = restored.predict("test")
         assert label == "safe"
 
 

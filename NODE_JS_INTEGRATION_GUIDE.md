@@ -68,11 +68,7 @@ export interface ClassifyPayload {
 ```json
 {
   "label": "injection",
-  "confidence": 0.9854,
-  "categories": [
-    "Instruction Override",
-    "Data Exfiltration"
-  ]
+  "confidence": 0.9854
 }
 ```
 

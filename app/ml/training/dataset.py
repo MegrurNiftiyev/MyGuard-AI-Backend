@@ -15,7 +15,7 @@ from collections import defaultdict
 import numpy as np
 
 from app.core.logging import get_logger
-from app.ml.cnn.architecture import LABEL_NAMES, CATEGORY_NAMES
+from app.ml.cnn.architecture import LABEL_NAMES
 
 logger = get_logger(__name__)
 
@@ -38,25 +38,6 @@ def encode_labels(labels: list[str]) -> np.ndarray:
         else:
             logger.warning("Unknown label '%s' at index %d — defaulting to safe", lab, i)
             encoded[i, 0] = 1.0  # default to safe
-    return encoded
-
-
-def encode_categories(categories_list: list[list[str]], num_categories: int | None = None) -> np.ndarray:
-    """Multi-hot encode category lists into a (N, num_categories) numpy array.
-
-    Category order follows ``CATEGORY_NAMES``.
-    """
-    if num_categories is None:
-        num_categories = len(CATEGORY_NAMES)
-
-    cat_to_idx = {name: i for i, name in enumerate(CATEGORY_NAMES)}
-    n = len(categories_list)
-    encoded = np.zeros((n, num_categories), dtype=np.float32)
-    for i, cats in enumerate(categories_list):
-        for cat in cats:
-            idx = cat_to_idx.get(cat)
-            if idx is not None:
-                encoded[i, idx] = 1.0
     return encoded
 
 

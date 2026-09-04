@@ -20,20 +20,10 @@ except ImportError:
 from retvec.tf import RETVecTokenizer
 
 
-# Default attack category labels — order must match training data encoding
-CATEGORY_NAMES = [
-    "Instruction Override",
-    "Ranking Manipulation",
-    "Data Exfiltration",
-    "Social Engineering",
-    "Prompt Leaking",
-    "Context Manipulation",
-]
-
 LABEL_NAMES = ["safe", "suspicious", "injection"]
 
 
-def build_model(sequence_length: int = 128, num_categories: int = 6) -> Model:
+def build_model(sequence_length: int = 128) -> Model:
     """Build and compile the RETVec+CNN classification model.
 
     Architecture:
@@ -42,13 +32,11 @@ def build_model(sequence_length: int = 128, num_categories: int = 6) -> Model:
         → Conv1D(128, kernel_size=5, relu)
         → GlobalMaxPooling1D
         → Dense(64, relu) → Dropout(0.3)
-        → Two output heads:
-            - ``label``:      Dense(3, softmax)  — safe / suspicious / injection
-            - ``categories``: Dense(N, sigmoid)  — multi-label attack categories
+        → Output head:
+            - ``label``: Dense(3, softmax) — safe / suspicious / injection
 
     Args:
         sequence_length: Number of tokens for RETVec (default 128).
-        num_categories: Number of attack category labels (default 6).
 
     Returns:
         Compiled Keras ``Model``.
@@ -66,24 +54,13 @@ def build_model(sequence_length: int = 128, num_categories: int = 6) -> Model:
     x = layers.Dense(64, activation="relu")(x)
     x = layers.Dropout(0.3)(x)
 
-    # Output head 1: risk label (3-way classification)
+    # Output head: risk label (3-way classification)
     label_output = layers.Dense(3, activation="softmax", name="label")(x)
 
-    # Output head 2: attack categories (multi-label)
-    category_output = layers.Dense(
-        num_categories, activation="sigmoid", name="categories"
-    )(x)
-
-    model = Model(inputs=inputs, outputs=[label_output, category_output])
+    model = Model(inputs=inputs, outputs=label_output)
     model.compile(
         optimizer="adam",
-        loss={
-            "label": "categorical_crossentropy",
-            "categories": "binary_crossentropy",
-        },
-        metrics={
-            "label": ["accuracy"],
-            "categories": ["binary_accuracy"],
-        },
+        loss="categorical_crossentropy",
+        metrics=["accuracy"],
     )
     return model
