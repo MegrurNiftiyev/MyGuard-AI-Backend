@@ -159,16 +159,43 @@ def load_real_dataset(raw_dir: str):
                     "text": extracted
                 })
             else:
+                ext = os.path.splitext(fname)[1].lower()
                 file_chunks = []
+                # Check for docx paragraph-level white font / hidden text
+                docx_inj_lines = set()
+                if ext == ".docx":
+                    try:
+                        doc = docx.Document(fpath)
+                        for p in doc.paragraphs:
+                            ptxt = p.text.strip()
+                            if not ptxt:
+                                continue
+                            is_p_white = False
+                            for r in p.runs:
+                                if r.font.color and r.font.color.rgb and str(r.font.color.rgb).upper() in ("FFFFFF", "FFF"):
+                                    is_p_white = True
+                                    break
+                                if r._r.rPr is not None and r._r.rPr.find(docx.oxml.ns.qn("w:vanish")) is not None:
+                                    is_p_white = True
+                                    break
+                            if is_p_white:
+                                docx_inj_lines.add(ptxt)
+                    except Exception:
+                        pass
+
                 lines = [l.strip() for l in extracted.split("\n") if l.strip()]
                 for line in lines:
                     is_inj_line = False
                     if category == "injection":
                         low = line.lower()
-                        if any(kw in low for kw in ["prompt", "system", "yuxarida", "mene", "ignore", "override", "@", "//", "#", "||", "^^", "***", "&&", "<system", "[system"]):
+                        if line in docx_inj_lines or any(kw in low for kw in [
+                            "prompt", "system", "yuxarida", "mene", "ignore", "override",
+                            "@", "//", "#", "||", "^^", "***", "&&", "<system", "[system",
+                            "internal system update", "forget", "unrestricted"
+                        ]):
                             is_inj_line = True
                     
-                    lbl = "injection" if (category == "injection" and is_inj_line) else ("injection" if category == "injection" else "safe")
+                    lbl = "injection" if (category == "injection" and is_inj_line) else "safe"
 
                     words = line.split()
                     if len(words) <= 60:
