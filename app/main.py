@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
         logger.warning("Active model initialization warning: %s", str(e))
 
     logger.info("==================================================================")
-    logger.info("🚀 Swagger UI (Interactive API Docs): http://localhost:8000/docs")
+    logger.info("🚀 Swagger UI (Interactive API Docs): http://localhost:8000/api-docs")
     logger.info("==================================================================")
 
     yield
@@ -56,7 +56,7 @@ app = FastAPI(
     ),
     version="0.1.0",
     lifespan=lifespan,
-    docs_url="/docs",
+    docs_url="/api-docs",
     redoc_url="/redoc",
 )
 
@@ -79,7 +79,7 @@ app.include_router(dataset.router)
 @app.get("/", include_in_schema=False)
 async def root():
     """Redirect root path to interactive Swagger UI documentation."""
-    return RedirectResponse(url="/docs")
+    return RedirectResponse(url="/api-docs")
 
 
 @app.get("/health", tags=["Health"])

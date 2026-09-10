@@ -58,7 +58,7 @@ The MyGuard platform consists of synchronized web applications, core gateway bac
 ### 🚀 Production Live URLs & API Gateways
 
 - **🐍 Python FastAPI ML Microservice (Production):** `https://myguard-ai-backend.onrender.com`
-- **📖 ML Microservice Interactive Swagger UI Docs:** `https://myguard-ai-backend.onrender.com/docs`
+- **📖 ML Microservice Interactive Swagger UI Docs:** `https://myguard-ai-backend.onrender.com/api-docs`
 - **🚀 Node.js Gateway REST API Base URL (Production):** `https://mygurad-backend-v2.onrender.com/api`
 - **📖 Node.js Gateway Interactive Swagger UI Docs:** `https://mygurad-backend-v2.onrender.com/api-docs`
 - **⚡ Real-Time WebSocket Server (Socket.IO):** `https://mygurad-backend-v2.onrender.com`
@@ -578,7 +578,7 @@ python seed_model.py
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-Interactive Swagger UI will be available at: `http://localhost:8000/docs`
+Interactive Swagger UI will be available at: `http://localhost:8000/api-docs`
 
 ### 6. Train Model on Dataset
 ```bash
