@@ -95,7 +95,6 @@ interface ClassifyPayload {
 interface ClassifyResponse {
   label: 'safe' | 'suspicious' | 'injection';
   confidence: number;
-  categories: string[];
 }
 
 export async function classifyDocumentWithMlService(

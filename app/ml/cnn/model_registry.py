@@ -189,20 +189,9 @@ async def load_active_model():
                 logger.info("Active model version %s loaded into memory", version)
                 return _cached_model
             else:
-                raise RuntimeError("No active model record found in Firestore.")
+                logger.warning("No active model record found in Firestore. Fallback to local trained disk model.")
         except Exception as e:
-            logger.critical("CRITICAL: Failed to load active model from Firebase: %s", str(e))
-            if not settings.ALLOW_DUMMY_MODEL_FALLBACK:
-                raise RuntimeError(f"Classification model unavailable: {str(e)}")
-            
-            logger.warning("WARNING: Falling back to DummyModel due to ALLOW_DUMMY_MODEL_FALLBACK=True")
-
-    else:
-        logger.critical("CRITICAL: Firestore DB is not initialized.")
-        if not settings.ALLOW_DUMMY_MODEL_FALLBACK:
-            raise RuntimeError("Classification model unavailable: Firestore DB not initialized.")
-        
-        logger.warning("WARNING: Falling back to DummyModel due to ALLOW_DUMMY_MODEL_FALLBACK=True")
+            logger.warning("Failed to load active model from Firebase (%s). Fallback to local trained disk model.", str(e))
 
     # Check if a real trained model exists on local disk
     local_paths = [
@@ -212,9 +201,9 @@ async def load_active_model():
     for lp in local_paths:
         if os.path.exists(lp):
             try:
-                import tensorflow as tf
+                import tf_keras as keras
                 from app.ml.cnn.architecture import RETVecTokenizer
-                model = tf.keras.models.load_model(
+                model = keras.models.load_model(
                     lp, custom_objects={"RETVecTokenizer": RETVecTokenizer}
                 )
                 _cached_model = model
@@ -224,11 +213,14 @@ async def load_active_model():
             except Exception as e:
                 logger.warning("Could not load local model from %s: %s", lp, str(e))
 
-    # In-memory fallback
-    logger.info("Using in-memory DummyModel fallback (version: dummy-v0)")
-    _cached_model = DummyModel()
-    _cached_version = "dummy-v0"
-    return _cached_model
+    if settings.ALLOW_DUMMY_MODEL_FALLBACK:
+        # In-memory fallback
+        logger.info("Using in-memory DummyModel fallback (version: dummy-v0)")
+        _cached_model = DummyModel()
+        _cached_version = "dummy-v0"
+        return _cached_model
+
+    raise RuntimeError("Classification model unavailable: No active model in Firebase or local disk.")
 
 
 async def save_model_version(model, metrics: dict, version: str) -> None:

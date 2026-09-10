@@ -468,11 +468,9 @@ Ai-Models
 ├── README.md                   # Primary documentation
 ├── REAL_DATASET_TRAINING_REPORT.md # Training report & metric log
 ├── requirements.txt            # Python package dependencies
-├── train_model.py              # Standalone model training & evaluation script
-├── generate_dataset.py         # Synthetic/Real dataset generation utility
-├── seed_model.py               # Bootstrapping script for base model initialization
-├── push_to_firebase.py         # Script to push local model to Firebase Storage
-├── test_extraction.py          # Document text extraction validation test
+├── train_model.py              # CLI entrypoint wrapper (delegates to app.scripts.train_model)
+├── seed_model.py               # CLI entrypoint wrapper (delegates to app.scripts.seed_model)
+├── push_to_firebase.py         # CLI entrypoint wrapper (delegates to app.scripts.push_to_firebase)
 ├── app/
 │   ├── main.py                 # FastAPI application factory & lifecycle hooks
 │   ├── api/
@@ -490,8 +488,8 @@ Ai-Models
 │   │   └── training_job.py     # Background worker thread for training runs
 │   ├── ml/
 │   │   ├── cnn/
-│   │   │   ├── architecture.py # RETVec + Conv1D dual-head model graph
-│   │   │   └── model_registry.py # Firebase Zip load/save & disk caching
+│   │   │   ├── architecture.py # RETVec + Conv1D model graph
+│   │   │   └── model_registry.py # Firebase & local disk load/save logic
 │   │   ├── preprocessing/
 │   │   │   └── normalize.py    # Basic text normalization helpers
 │   │   ├── retvec/
@@ -502,6 +500,10 @@ Ai-Models
 │   │       └── train.py        # Class weight computation & training loop
 │   ├── models/
 │   │   └── schemas.py          # Pydantic request/response schemas
+│   ├── scripts/                # Standalone CLI scripts module
+│   │   ├── push_to_firebase.py # Firebase model upload & promotion module
+│   │   ├── seed_model.py       # Initial model seeding module
+│   │   └── train_model.py      # RETVec+CNN training & held-out test pipeline
 │   └── services/
 │       └── supabase_dataset.py # Supabase Storage & DB dataset manager
 ├── data/
