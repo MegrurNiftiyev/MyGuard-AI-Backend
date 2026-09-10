@@ -177,9 +177,12 @@ In enterprise security gateways, **a False Negative (missing a malicious injecti
 ## 📊 Dataset Processing, Extraction Pipeline & Real Evaluation
 
 ### 1. Document Extraction & Multi-Format Ingestion
-The dataset pipeline (`train_model.py` and `app/services/supabase_dataset.py`) handles structured parsing across multiple document formats:
+The dataset pipeline (`app/scripts/train_model.py` and `app/services/supabase_dataset.py`) handles structured parsing across large-scale synthetic datasets and real-world administrative files:
+- **10,200 PDF Synthetic Injection Dataset v4**: 10,200 synthetic PDF documents generated across 6 document archetypes (invoice, contract, report, email, resume, form) with 1,700 clean baselines and 8,500 prompt injection attacks (`invisible_text`, `system_spoof`, `goal_hijacking`, `persona_swap`, `metadata`).
+- **Real Azerbaijani & English Administrative Documents**: 325 real-world government and corporate documents (Baku IH, Ministries, Town Councils, Expense Reports).
 - **Microsoft Word (`.docx`)**: Parsed paragraph-by-paragraph and cell-by-cell across nested tables (`python-docx`).
-- **Adobe PDF (`.pdf`)**: Internal structural text stream extraction (`pypdf`).
+- **PowerPoint (`.pptx`)**: Text frames and speaker notes extracted across slides (`python-pptx`).
+- **Adobe PDF (`.pdf`)**: Structural text stream and binary metadata extraction (`pypdf`).
 - **Archive Packages (`.zip`)**: Recursive decompression and text stream extraction.
 - **Plain Text (`.txt`)**: UTF-8 stream normalization.
 
@@ -318,9 +321,9 @@ Returns service status. No auth required.
 
 ---
 
-### 2. Document Classification (`/classify`)
+### 2. Injection Analysis (`/analyze-injection`)
 
-#### `POST /classify`
+#### `POST /analyze-injection`
 Accepts text extracted by Node.js (raw text, visual OCR text, hidden text layers) and returns predictions.
 
 - **Request Headers:**
@@ -402,27 +405,6 @@ Triggers an asynchronous training pipeline run.
 
 ---
 
-#### `GET /train/status/{jobId}`
-Checks training job progress and metrics.
-
-- **Response (`200 OK`):**
-```json
-{
-  "jobId": "job-998123-abc",
-  "status": "completed",
-  "startedAt": "2026-09-01T15:00:00Z",
-  "finishedAt": "2026-09-01T15:04:30Z",
-  "resultVersion": "v20260901_150430",
-  "metrics": {
-    "accuracy": 0.88,
-    "f1": 0.94,
-    "recall": 1.0
-  }
-}
-```
-
----
-
 ### 5. Supabase Dataset Management (`/api/v1/dataset`)
 
 #### `GET /api/v1/dataset/files`
@@ -476,9 +458,9 @@ Ai-Models
 │   ├── api/
 │   │   ├── dependencies.py     # Auth verification & IP ban protection
 │   │   └── routes/
-│   │       ├── classify.py     # POST /classify route handler
+│   │       ├── classify.py     # POST /analyze-injection route handler
 │   │       ├── model_status.py # GET/PATCH /model endpoints
-│   │       └── train.py        # POST/GET /train background runner routes
+│   │       └── train.py        # POST /train background runner route
 │   ├── core/
 │   │   ├── config.py           # Pydantic Settings & Env configuration
 │   │   ├── firebase.py         # Firebase Admin SDK initialization

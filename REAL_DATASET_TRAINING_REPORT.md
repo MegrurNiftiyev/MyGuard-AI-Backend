@@ -30,7 +30,8 @@
 | **2026-08-30 — 2026-08-31** | Sama, Zinət | Benign (Təmiz) & Injection | docx, pdf | `01_Aylıq_Fəaliyyət_Hesabatı`, `02_Xidmət_Müqaviləsi`, `04_Layihə_Məlumat_Cədvəli`, `05_Görüş_Protokolu`, `06_Aylıq_İş_Planı`, `19_sifaris_senedi_problem` |
 | **2026-09-01 — 2026-09-02** | Zinət, Sama, Mələk | Benign (Təmiz) & Injection | docx, pdf, pptx | `24_qebul_tehvil_akti`, `25_sigorta_polisi`, `26_emek_muqavilesi`, `27_vekaletname`, `28_inventarizasiya_akti`, `29_bank_rekvizit`, `31_tecili_odenis`, `32_hosting`, `33_elave_is`, `34_distributor`, `Presentation1-4 pptx` |
 | **2026-09-03 — 2026-09-04** | Sama, Mələk | Benign (Təmiz) & Injection | docx, pdf, pptx | `ekologiya inget.pptx`, `CV anaıiz inget.pptx`, `Elnnnn ingg.pptx`, `Dərs cədvəli ingg.pptx`, `Gabnnt ingg.pptx`, `AzTexnika.docx`, `Rəqəmsal Transformasiya və Süni İntellekt.pdf`, `UNEC__1788411688 - 1788412779 pdf/docx` |
-| **2026-09-09 (Latest)** | Team (Full Real Administrative Dataset) | Benign (AZ + ENG Real Docs) & Injection | docx, pdf, pptx, xlsx | **325 real admin docs**: 197 AZ docs (Baku IH, Ministries, Gazette) + 128 ENG admin docs (Town council, financial reports) + 65 prompt injection payloads |
+| **2026-09-09 (Real Admin Dataset)** | Team (Full Real Administrative Dataset) | Benign (AZ + ENG Real Docs) & Injection | docx, pdf, pptx, xlsx | **325 real admin docs**: 197 AZ docs (Baku IH, Ministries, Gazette) + 128 ENG admin docs (Town council, financial reports) + 65 prompt injection payloads |
+| **2026-09-10 (PDF Dataset v4)** | Synthetic Data Science Course / Team Dataset | Benign & Multi-type Injections | csv, pdf | **10,200 PDFs**: 1,700 clean + 8,500 prompt injection documents (invisible_text, system_spoof, goal_hijacking, persona_swap, metadata) across 6 archetypes (invoice, contract, report, email, resume, form) |
 
 ---
 

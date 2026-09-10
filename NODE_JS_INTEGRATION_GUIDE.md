@@ -36,14 +36,14 @@ X-Internal-Token: <YOUR_INTERNAL_SERVICE_TOKEN>
 
 ---
 
-### 1. Document Text Classification — `POST /classify`
+### 1. Document Text Injection Analysis — `POST /analyze-injection`
 
 Sends extracted document text, visual OCR text, and hidden text segments/arrays to the ML service for real-time risk assessment.
 
 #### Endpoint Details
 - **HTTP Method:** `POST`
-- **Path:** `/classify`
-- **Full URL (Production/Render):** `https://myguard-ai-backend.onrender.com/classify`
+- **Path:** `/analyze-injection`
+- **Full URL (Production/Render):** `https://myguard-ai-backend.onrender.com/analyze-injection`
 - **Headers Required:**
   - `Content-Type: application/json`
   - `X-Internal-Token: <INTERNAL_SERVICE_TOKEN>` (Mütləq göndərilməlidir)
@@ -82,7 +82,7 @@ export interface ClassifyPayload {
 
 ### 💻 Node.js Axios Integration Example
 
-Below is a complete, production-ready TypeScript/Node.js helper function to call Layer 2 ML `/classify`:
+Below is a complete, production-ready TypeScript/Node.js helper function to call Layer 2 ML `/analyze-injection`:
 
 ```typescript
 import axios from 'axios';
@@ -109,7 +109,7 @@ export async function classifyDocumentWithMlService(
 
   try {
     const response = await axios.post<ClassifyResponse>(
-      `${mlServiceUrl}/classify`,
+      `${mlServiceUrl}/analyze-injection`,
       payload,
       {
         headers: {
@@ -199,36 +199,7 @@ Triggers an asynchronous background job to pull the latest labeled documents fro
 
 ---
 
-### 5. Check Training Job Status — `GET /train/status/{jobId}`
-
-Polls the progress of a background training job.
-
-#### Endpoint Details
-- **HTTP Method:** `GET`
-- **Path:** `/train/status/:jobId`
-- **Headers Required:**
-  - `X-Internal-Token: <INTERNAL_SERVICE_TOKEN>` (Mütləq göndərilməlidir)
-
-#### Success Response (Completed)
-```json
-{
-  "jobId": "7c9e3b1a-4d2f-4a8b-9e10-123456789abc",
-  "status": "completed",
-  "startedAt": "2026-09-01T15:00:00.000Z",
-  "finishedAt": "2026-09-01T15:04:30.000Z",
-  "resultVersion": "v20260901_150430",
-  "metrics": {
-    "f1": 0.945,
-    "precision": 0.952,
-    "recall": 1.0
-  },
-  "error": null
-}
-```
-
----
-
-### 6. Health Check Probe — `GET /health`
+### 5. Health Check Probe — `GET /health`
 
 Public endpoint used by load balancers and Node.js for liveness probes.
 

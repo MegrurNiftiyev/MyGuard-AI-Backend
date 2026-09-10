@@ -169,6 +169,38 @@ def load_real_dataset(raw_dir: str):
 
     scanned_file_counts = {}
 
+    # Load 10,200 PDF V4 Synthetic Dataset if dataset_V4.csv exists
+    v4_csv_path = os.path.join(downloaded_dir, "dataset_V4.csv")
+    if os.path.exists(v4_csv_path):
+        try:
+            import pandas as pd
+            print(f"Loading 10,200 PDF V4 Synthetic Dataset samples from {v4_csv_path}...")
+            df_v4 = pd.read_csv(v4_csv_path)
+            v4_count = 0
+            for _, row in df_v4.iterrows():
+                doc_id = f"v4_{row['doc_id']}"
+                extracted_text = str(row['extracted_text']) if pd.notna(row['extracted_text']) else ""
+                if not extracted_text.strip():
+                    continue
+
+                is_inj = bool(row['is_injected'])
+                lbl = "injection" if is_inj else "safe"
+                v4_count += 1
+
+                lines = [l.strip() for l in extracted_text.split("\n") if l.strip()]
+                for line in lines:
+                    words = line.split()
+                    if len(words) <= 60:
+                        all_chunks.append((doc_id, line, lbl))
+                        all_doc_ids.append(doc_id)
+                    else:
+                        for c in chunk_text(line):
+                            all_chunks.append((doc_id, c, lbl))
+                            all_doc_ids.append(doc_id)
+            scanned_file_counts["dataset_V4.csv (10,200 PDFs)"] = v4_count
+        except Exception as err:
+            print(f"Warning loading dataset_V4.csv: {err}")
+
     for cat_dir, category in folders_to_scan:
         if not os.path.exists(cat_dir):
             continue

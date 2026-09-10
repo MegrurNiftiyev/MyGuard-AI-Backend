@@ -29,7 +29,7 @@ async def test_classify_returns_prediction(auth_headers):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
-                "/classify",
+                "/analyze-injection",
                 json={
                     "documentId": "doc-123",
                     "fullText": "This is a normal corporate document with standard operational content.",
@@ -56,7 +56,7 @@ async def test_classify_rejects_missing_auth():
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
-                "/classify",
+                "/analyze-injection",
                 json={
                     "documentId": "doc-123",
                     "fullText": "Sample text for testing authentication validation.",
@@ -79,7 +79,7 @@ async def test_classify_rejects_wrong_token():
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
-                "/classify",
+                "/analyze-injection",
                 json={
                     "documentId": "doc-123",
                     "fullText": "Sample text for testing invalid token handling.",
@@ -96,7 +96,7 @@ async def test_classify_rejects_insufficient_text(auth_headers):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/classify",
+            "/analyze-injection",
             json={
                 "documentId": "doc-short",
                 "fullText": "One two three four",  # 4 words
@@ -114,7 +114,7 @@ async def test_classify_rejects_extra_legacy_fields(auth_headers):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/classify",
+            "/analyze-injection",
             json={
                 "documentId": "doc-legacy",
                 "fullText": "This is valid text containing enough words for test.",
@@ -149,7 +149,7 @@ async def test_classify_passes_raw_full_text(auth_headers):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             res = await client.post(
-                "/classify",
+                "/analyze-injection",
                 json={
                     "documentId": "doc-raw",
                     "fullText": raw_input_text,

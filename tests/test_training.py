@@ -141,60 +141,6 @@ async def test_start_training_returns_job_id(auth_headers):
     assert data["status"] == "queued"
 
 
-@pytest.mark.asyncio
-async def test_training_status_not_found(auth_headers):
-    """GET /train/status/{job_id} with unknown ID should return 404."""
-    mock_db = MagicMock()
-    mock_doc = MagicMock()
-    mock_doc.get.return_value.exists = False
-    mock_db.collection.return_value.document.return_value = mock_doc
-
-    with patch("app.api.routes.train.get_firestore_db", return_value=mock_db):
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get(
-                "/train/status/nonexistent-id", headers=auth_headers
-            )
-
-    assert response.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_training_status_returns_job(auth_headers):
-    """GET /train/status/{job_id} should return the job record."""
-    from datetime import datetime, timezone
-
-    mock_job_dict = {
-        "status": "completed",
-        "createdAt": datetime.now(timezone.utc).isoformat(),
-        "startedAt": datetime.now(timezone.utc).isoformat(),
-        "finishedAt": datetime.now(timezone.utc).isoformat(),
-        "resultVersion": "v12345678",
-        "metrics": {"f1": 0.85, "precision": 0.87, "recall": 0.83},
-    }
-    mock_db = MagicMock()
-    mock_doc = MagicMock()
-    mock_doc.get.return_value.exists = True
-    mock_doc.get.return_value.to_dict.return_value = mock_job_dict
-    mock_db.collection.return_value.document.return_value = mock_doc
-
-    with patch("app.api.routes.train.get_firestore_db", return_value=mock_db):
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get(
-                "/train/status/test-job-123", headers=auth_headers
-            )
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["jobId"] == "test-job-123"
-    assert data["status"] == "completed"
-    assert data["jobId"] == "test-job-123"
-    assert data["status"] == "completed"
-    assert data["resultVersion"] == "v12345678"
-    assert "metrics" in data
-
-
 # ───────────────── Model promotion endpoint ─────────────────
 
 
@@ -242,7 +188,7 @@ async def test_promote_model_not_found(auth_headers):
 
 @pytest.mark.asyncio
 async def test_classify_still_works_with_dummy(auth_headers):
-    """POST /classify should still work with DummyModel via run_prediction."""
+    """POST /analyze-injection should still work with DummyModel via run_prediction."""
     dummy = DummyModel()
 
     with patch(
@@ -253,7 +199,7 @@ async def test_classify_still_works_with_dummy(auth_headers):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
-                "/classify",
+                "/analyze-injection",
                 json={"documentId": "doc-123", "fullText": "normal document containing enough words for test"},
                 headers=auth_headers,
             )

@@ -11,17 +11,17 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/classify", tags=["Classification"])
+router = APIRouter(prefix="/analyze-injection", tags=["Prompt Injection Analysis"])
 
 
 @router.post(
     "",
     response_model=ClassifyResponse,
     dependencies=[Depends(verify_internal_service)],
-    summary="Classify extracted document text",
+    summary="Analyze document text for prompt injection threats",
     description=(
-        "Accepts already-extracted text (from the Node.js PDF/OCR layer) "
-        "and returns a risk label, confidence score, and detected attack categories."
+        "Accepts extracted text (from the Node.js PDF/OCR layer) "
+        "and returns a risk label (safe/suspicious/injection) and confidence score."
     ),
 )
 async def classify(
