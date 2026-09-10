@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.logging import setup_logging, get_logger
 from app.core.firebase import init_firebase
-from app.api.routes import classify, model_status, train, dataset
+from app.api.routes import classify, model_status, train
 
 from fastapi.responses import RedirectResponse
 
@@ -73,7 +73,6 @@ app.add_middleware(
 app.include_router(classify.router)
 app.include_router(model_status.router)
 app.include_router(train.router)
-app.include_router(dataset.router)
 
 
 @app.get("/", include_in_schema=False)

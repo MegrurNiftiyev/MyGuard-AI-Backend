@@ -228,25 +228,7 @@ Polls the progress of a background training job.
 
 ---
 
-### 6. Dataset Synchronization — `/api/v1/dataset/*`
-
-Endpoints for inspecting and downloading dataset files from Supabase.
-
-#### A. List Dataset Files
-- **GET** `/api/v1/dataset/files?category=benign`
-- **Headers Required:** `X-Internal-Token: <INTERNAL_SERVICE_TOKEN>`
-
-#### B. Download File
-- **GET** `/api/v1/dataset/file/{record_id}/download`
-- **Headers Required:** `X-Internal-Token: <INTERNAL_SERVICE_TOKEN>`
-
-#### C. Sync Dataset Locally
-- **POST** `/api/v1/dataset/sync`
-- **Headers Required:** `X-Internal-Token: <INTERNAL_SERVICE_TOKEN>`
-
----
-
-### 7. Health Check Probe — `GET /health`
+### 6. Health Check Probe — `GET /health`
 
 Public endpoint used by load balancers and Node.js for liveness probes.
 

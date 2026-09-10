@@ -477,7 +477,6 @@ Ai-Models
 │   │   ├── dependencies.py     # Auth verification & IP ban protection
 │   │   └── routes/
 │   │       ├── classify.py     # POST /classify route handler
-│   │       ├── dataset.py      # /api/v1/dataset routes (Supabase sync)
 │   │       ├── model_status.py # GET/PATCH /model endpoints
 │   │       └── train.py        # POST/GET /train background runner routes
 │   ├── core/
