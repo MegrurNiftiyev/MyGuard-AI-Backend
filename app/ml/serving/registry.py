@@ -91,38 +91,6 @@ def deserialize_model(blob: bytes):
 
 
 # ---------------------------------------------------------------------------
-# Prediction adapter
-# ---------------------------------------------------------------------------
-def run_prediction(model, text: str) -> tuple[str, float]:
-    """Run chunk-based prediction on full text and return (label, confidence)."""
-    from app.ml.cnn.architecture import LABEL_NAMES
-    from app.ml.preprocessing.chunking import chunk_text
-
-    if isinstance(model, DummyModel):
-        return model.predict(text)
-
-    chunks = chunk_text(text)
-    if not chunks:
-        return ("safe", 0.0)
-
-    chunk_inputs = np.array([[c] for c in chunks])
-    predictions = model.predict(chunk_inputs, verbose=0)
-
-    # Predictions array has shape (N, 3): [safe, suspicious, injection]
-    label_probs = predictions if isinstance(predictions, np.ndarray) and predictions.ndim == 2 else predictions[0]
-
-    label_idx = label_probs.argmax(axis=1)  # argmax per chunk
-    worst_chunk_idx = int(label_probs[:, 2].argmax())  # chunk with highest injection probability
-
-    final_label_idx = 2 if 2 in label_idx else (1 if 1 in label_idx else 0)
-    label = LABEL_NAMES[final_label_idx]
-
-    confidence = float(label_probs[worst_chunk_idx, final_label_idx])
-
-    return (label, confidence)
-
-
-# ---------------------------------------------------------------------------
 # Public API backed by Firebase (Firestore & Storage)
 # ---------------------------------------------------------------------------
 def get_local_cache_path(version: str) -> str:
@@ -245,8 +213,7 @@ async def save_model_version(model, metrics: dict, version: str) -> None:
             logger.error("Failed to upload model zip to Firebase Storage: %s", str(e))
             # Continue anyway since it's saved locally
 
-
-    # 2. Save metadata document to Firebase Firestore
+    # 3. Save metadata document to Firebase Firestore
     db = get_firestore_db()
     if db is not None:
         try:
@@ -281,7 +248,6 @@ async def promote_model_version(version: str) -> dict:
     if data.get("status") == "active":
         raise ValueError(f"Model version '{version}' is already active")
 
-    # Demote existing active models
     # Demote existing active models
     active_docs = db.collection("models").where(filter=firestore.FieldFilter("status", "==", "active")).get()
     for active_doc in active_docs:

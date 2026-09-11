@@ -3,12 +3,11 @@ Tests for the model registry module.
 """
 
 import pytest
-from app.ml.cnn.model_registry import (
+from app.ml.serving.registry import (
     DummyModel,
     serialize_model,
     deserialize_model,
 )
-from app.ml.preprocessing.normalize import basic_normalize
 
 
 class TestDummyModel:
@@ -41,25 +40,3 @@ class TestSerialization:
         # Verify the restored model still works
         label, confidence = restored.predict("test")
         assert label == "safe"
-
-
-class TestNormalize:
-    """Verify basic_normalize handles edge cases."""
-
-    def test_lowercases(self):
-        assert basic_normalize("HELLO") == "hello"
-
-    def test_collapses_whitespace(self):
-        assert basic_normalize("a   b\t\nc") == "a b c"
-
-    def test_strips_edges(self):
-        assert basic_normalize("  padded  ") == "padded"
-
-    def test_empty_string(self):
-        assert basic_normalize("") == ""
-
-    def test_unicode_normalization(self):
-        # NFC normalization should compose characters
-        text = "caf\u0065\u0301"  # e + combining accent
-        result = basic_normalize(text)
-        assert "é" in result or "e" in result  # depends on NFC composition

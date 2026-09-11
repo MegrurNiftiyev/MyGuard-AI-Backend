@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from httpx import AsyncClient, ASGITransport
 
 from app.main import app
-from app.ml.cnn.model_registry import DummyModel
-from app.ml.training.dataset import (
+from app.ml.serving.registry import DummyModel
+from app.ml.training.data.encoding import (
     encode_labels,
     stratified_split_with_test_ratio_override,
 )

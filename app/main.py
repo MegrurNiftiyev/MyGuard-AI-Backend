@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
 
     # Warm-load model (fetches active model from Firebase Storage/Firestore or uses DummyModel fallback)
     try:
-        from app.ml.cnn.model_registry import load_active_model
+        from app.ml.serving.registry import load_active_model
 
         model = await load_active_model()
         logger.info("Active model initialized successfully (cached)")
@@ -73,6 +73,59 @@ app.add_middleware(
 app.include_router(classify.router)
 app.include_router(model_status.router)
 app.include_router(train.router)
+
+
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc: RequestValidationError):
+    """Format Pydantic validation errors into clean {code, message} JSON."""
+    msg_parts = []
+    for err in exc.errors():
+        loc = ".".join(str(l) for l in err.get("loc", []) if str(l) != "body")
+        msg = err.get("msg", "Invalid field")
+        msg_parts.append(f"Field '{loc}' {msg.lower()}" if loc else msg)
+    message = "; ".join(msg_parts) if msg_parts else "Unprocessable Entity validation error"
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "code": "UNPROCESSABLE_ENTITY",
+            "message": message,
+        },
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request, exc: StarletteHTTPException):
+    """Format HTTP exceptions into clean {code, message} JSON."""
+    detail = exc.detail
+    if isinstance(detail, dict):
+        message = detail.get("error") or detail.get("message") or detail.get("detail") or str(detail)
+    else:
+        message = str(detail)
+
+    code_map = {
+        400: "BAD_REQUEST",
+        401: "UNAUTHORIZED",
+        403: "FORBIDDEN",
+        404: "NOT_FOUND",
+        422: "UNPROCESSABLE_ENTITY",
+        500: "INTERNAL_SERVER_ERROR",
+        503: "SERVICE_UNAVAILABLE",
+    }
+    code = code_map.get(exc.status_code, "ERROR")
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "code": code,
+            "message": message,
+        },
+    )
 
 
 @app.get("/", include_in_schema=False)

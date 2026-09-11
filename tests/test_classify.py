@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 from httpx import AsyncClient, ASGITransport
 
 from app.main import app
-from app.ml.cnn.model_registry import DummyModel
+from app.ml.serving.registry import DummyModel
 
 
 @pytest.fixture
@@ -105,7 +105,7 @@ async def test_classify_rejects_insufficient_text(auth_headers):
         )
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "insufficient_text"
+    assert response.json()["message"] == "insufficient_text"
 
 
 @pytest.mark.asyncio

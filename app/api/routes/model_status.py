@@ -8,7 +8,7 @@ PATCH /model/{version}/promote — promote a candidate model to active
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.dependencies import verify_internal_service
-from app.ml.cnn.model_registry import get_active_model_metadata, promote_model_version
+from app.ml.serving.registry import get_active_model_metadata, promote_model_version
 
 router = APIRouter(prefix="/model", tags=["Model"])
 

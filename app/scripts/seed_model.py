@@ -16,7 +16,7 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from app.core.firebase import init_firebase, get_firestore_db
-from app.ml.cnn.model_registry import DummyModel, save_model_version
+from app.ml.serving.registry import DummyModel, save_model_version
 
 
 async def seed():

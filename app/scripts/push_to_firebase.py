@@ -19,7 +19,7 @@ if BASE_DIR not in sys.path:
 sys.stdout.reconfigure(encoding='utf-8')
 
 from app.core.firebase import init_firebase, get_storage_bucket, get_firestore_db
-from app.ml.cnn.model_registry import promote_model_version
+from app.ml.serving.registry import promote_model_version
 
 
 async def push_to_firebase():

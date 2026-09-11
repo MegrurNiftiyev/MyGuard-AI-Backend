@@ -32,7 +32,7 @@ import tensorflow as tf
 tf.random.set_seed(SEED)
 
 from app.ml.cnn.architecture import build_model, LABEL_NAMES
-from app.ml.training.dataset import encode_labels
+from app.ml.training.data.encoding import encode_labels
 from app.ml.training.train import get_class_weights
 from app.ml.preprocessing.chunking import chunk_text
 

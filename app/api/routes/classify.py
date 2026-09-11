@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 
 from app.api.dependencies import verify_internal_service
 from app.models.schemas import ClassifyRequest, ClassifyResponse
-from app.ml.cnn.model_registry import load_active_model, run_prediction
+from app.ml.serving.registry import load_active_model
+from app.ml.serving.inference import run_prediction
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
