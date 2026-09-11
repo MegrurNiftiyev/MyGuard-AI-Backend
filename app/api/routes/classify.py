@@ -5,7 +5,7 @@ POST /classify — document text classification endpoint.
 from fastapi import APIRouter, Depends, Header, HTTPException
 
 from app.api.dependencies import verify_internal_service
-from app.models.schemas import ClassifyRequest, ClassifyResponse
+from app.models.schemas import ClassifyRequest, ClassifyResponse, ErrorResponse
 from app.ml.serving.registry import load_active_model
 from app.ml.serving.inference import run_prediction
 from app.core.logging import get_logger
@@ -24,6 +24,12 @@ router = APIRouter(prefix="/analyze-injection", tags=["Prompt Injection Analysis
         "Accepts extracted text (from the Node.js PDF/OCR layer) "
         "and returns a risk label (safe/suspicious/injection) and confidence score."
     ),
+    responses={
+        401: {"model": ErrorResponse, "description": "Unauthorized — Missing or invalid X-Internal-Token header"},
+        403: {"model": ErrorResponse, "description": "Forbidden — Client IP banned due to 3 failed token attempts"},
+        422: {"model": ErrorResponse, "description": "Unprocessable Entity — Missing required fields or forbidden legacy keys"},
+        503: {"model": ErrorResponse, "description": "Service Unavailable — Insufficient text (<5 words) or ML model load failure"},
+    },
 )
 async def classify(
     req: ClassifyRequest,

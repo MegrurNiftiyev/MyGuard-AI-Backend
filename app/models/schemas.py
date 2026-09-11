@@ -57,3 +57,18 @@ class TrainingJobResponse(BaseModel):
     error: str | None = Field(
         default=None, description="Error message (if failed)"
     )
+
+
+class ErrorResponse(BaseModel):
+    """Standardized error response payload."""
+
+    code: str = Field(
+        ...,
+        description="Error classification code (e.g. UNPROCESSABLE_ENTITY, UNAUTHORIZED, FORBIDDEN, SERVICE_UNAVAILABLE)",
+        json_schema_extra={"example": "UNPROCESSABLE_ENTITY"},
+    )
+    message: str = Field(
+        ...,
+        description="Human-readable error explanation",
+        json_schema_extra={"example": "Field 'fullText' is required"},
+    )
