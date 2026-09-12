@@ -44,6 +44,8 @@ This microservice analyzes extracted document text, optical OCR text streams, an
 > **Model Readiness & Dataset Scaling Notice / Model Statusu və Data Tələbi:**
 > - **Architecture & Pipeline Readiness:** Modelin memarlıq quruluşu (Google RETVec + Conv1D dual-head neural network) tam olaraq qurulub, oturdulub və real-time nəticə almaq üçün hazır vəziyyətdədir.
 > - **Dataset Volume & Diversity Bottleneck:** Modelin dəqiqliyini (accuracy) daha da artırmaq üçün əsas çatışmayan cəhət mövcud dataset-in həcminin azlığı və nümunələrin oxşarlığıdır. Dataset materialları kəmiyyət və keyfiyyət baxımından (müxtəlif real-world sənəd və injection növləri ilə) artırıldıqca modelin accuracy göstəricisi də mütənasib olaraq yüksələcəkdir.
+> - **Private Service Architecture & Testing Mode:** Bu ML servisi istehsalat (production) mühitində şəbəkə daxilində tam izolyasiya olunmuş **Private Microservice** kimi fəaliyyət göstərir və `X-Internal-Token` qoruması ilə təmin edilir. Münsiflər və test edənlər üçün Swagger UI üzərindən canlı sınaq rahatlığı yaratmaq məqsədilə evaluasiya endpoint-ləri müvəqqəti olaraq açıq saxlanılmışdır.
+
 
 
 ---
@@ -502,8 +504,11 @@ Synchronizes remote Supabase dataset files to local disk.
 
 To prevent unauthorized access and Denial-of-Service (DoS) abuse:
 
-1. **Header Authentication:** Protected endpoints validate the `X-Internal-Token` header against `INTERNAL_SERVICE_TOKEN`.
-2. **Automated IP Ban Enforcement:**
+1. **Private Microservice Isolation Mode:**
+   - In production deployment environments, this ML microservice is deployed as an internal **Private Service** accessible only within the internal virtual network (VPC).
+   - In live evaluation mode, public access is temporarily enabled for evaluation endpoints to allow zero-friction testing via Swagger UI.
+2. **Header Authentication:** Protected endpoints validate the `X-Internal-Token` header against `INTERNAL_SERVICE_TOKEN` for server-to-server commands (`POST /train`, `POST /model/change-version/{version_id}`).
+3. **Automated IP Ban Enforcement:**
    - Tracks failed authentication attempts per client IP in memory (`app/api/dependencies.py`).
    - If an IP exceeds **3 invalid token attempts**, it is added to the banned IP registry.
    - Subsequent requests from banned IPs return `HTTP 403 Forbidden` instantly.
