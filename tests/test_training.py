@@ -145,8 +145,8 @@ async def test_start_training_returns_job_id(auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_promote_model_success(auth_headers):
-    """PATCH /model/{version}/promote should promote a candidate."""
+async def test_change_active_version_success(auth_headers):
+    """POST /model/change-version/{version_id} should promote a version to active."""
     mock_result = {"version": "v123", "metrics": {"f1": 0.9}, "status": "active"}
 
     with patch(
@@ -156,8 +156,8 @@ async def test_promote_model_success(auth_headers):
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.patch(
-                "/model/v123/promote", headers=auth_headers
+            response = await client.post(
+                "/model/change-version/v123", headers=auth_headers
             )
 
     assert response.status_code == 200
@@ -167,8 +167,8 @@ async def test_promote_model_success(auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_promote_model_not_found(auth_headers):
-    """PATCH /model/{version}/promote with unknown version should return 400."""
+async def test_change_active_version_not_found(auth_headers):
+    """POST /model/change-version/{version_id} with unknown version should return 400."""
     with patch(
         "app.api.routes.model_status.promote_model_version",
         new_callable=AsyncMock,
@@ -176,11 +176,50 @@ async def test_promote_model_not_found(auth_headers):
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.patch(
-                "/model/vXXX/promote", headers=auth_headers
+            response = await client.post(
+                "/model/change-version/vXXX", headers=auth_headers
             )
 
     assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_get_all_models_success(auth_headers):
+    """GET /model/all-models should return all models with isCurrentVersion flag."""
+    mock_models = [
+        {
+            "version": "run-11",
+            "status": "active",
+            "isCurrentVersion": True,
+            "metrics": {"test_acc": 0.50},
+            "createdAt": "2026-09-11T16:00:00Z",
+        },
+        {
+            "version": "run-10",
+            "status": "archived",
+            "isCurrentVersion": False,
+            "metrics": {"test_acc": 0.70},
+            "createdAt": "2026-09-09T14:00:00Z",
+        },
+    ]
+
+    with patch(
+        "app.api.routes.model_status.get_all_models_metadata",
+        new_callable=AsyncMock,
+        return_value=mock_models,
+    ):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/model/all-models", headers=auth_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 2
+    assert len(data["models"]) == 2
+    assert data["models"][0]["version"] == "run-11"
+    assert data["models"][0]["isCurrentVersion"] is True
+    assert data["models"][1]["version"] == "run-10"
+    assert data["models"][1]["isCurrentVersion"] is False
 
 
 # ───────────────── Classify still works with DummyModel ─────────────────

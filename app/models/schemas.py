@@ -11,7 +11,7 @@ class ClassifyRequest(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    documentId: str = Field(..., description="ID of the document being classified")
+    documentId: str | None = Field(default="N/A", description="Optional ID of the document being classified")
     fullText: str = Field(
         ...,
         description="Full extracted document text matching training input shape",
@@ -36,6 +36,30 @@ class ModelMetadataResponse(BaseModel):
     metrics: dict
     createdAt: str
     status: str
+    description: str | None = None
+    sourceCommit: str | None = None
+    storagePath: str | None = None
+    isCurrentVersion: bool = True
+
+
+class ModelDetailItem(BaseModel):
+    """Detailed model metadata with isCurrentVersion flag."""
+
+    version: str
+    status: str
+    isCurrentVersion: bool = False
+    metrics: dict = {}
+    description: str | None = None
+    sourceCommit: str | None = None
+    storagePath: str | None = None
+    createdAt: str | None = None
+
+
+class AllModelsResponse(BaseModel):
+    """List of all models returned by GET /model/all-models."""
+
+    total: int
+    models: list[ModelDetailItem]
 
 
 class TrainingJobResponse(BaseModel):

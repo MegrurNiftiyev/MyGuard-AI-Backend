@@ -43,6 +43,32 @@ async def test_classify_returns_prediction(auth_headers):
     assert 0.0 <= data["confidence"] <= 1.0
 
 
+@pytest.mark.asyncio
+async def test_classify_without_document_id(auth_headers):
+    """POST /analyze-injection should work even if documentId is omitted."""
+    dummy = DummyModel()
+
+    with patch(
+        "app.api.routes.classify.load_active_model",
+        new_callable=AsyncMock,
+        return_value=dummy,
+    ):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/analyze-injection",
+                json={
+                    "fullText": "This is a normal corporate document with standard operational content.",
+                },
+                headers=auth_headers,
+            )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["label"] in ("safe", "suspicious", "injection")
+    assert 0.0 <= data["confidence"] <= 1.0
+
+
 @pytest.mark.skip(reason="Token check temporarily disabled for local dev testing")
 @pytest.mark.asyncio
 async def test_classify_rejects_missing_auth():

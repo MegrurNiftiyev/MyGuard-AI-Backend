@@ -191,10 +191,17 @@ async def load_active_model():
     raise RuntimeError("Classification model unavailable: No active model in Firebase or local disk.")
 
 
-async def save_model_version(model, metrics: dict, version: str) -> None:
+async def save_model_version(
+    model,
+    metrics: dict,
+    version: str,
+    status: str = "candidate",
+    source_commit: str | None = None,
+    description: str | None = None,
+) -> None:
     """Persist a new model version to Firebase Storage and Firestore."""
     blob_bytes = serialize_model(model)
-    storage_path = f"models/model_{version}.keras"
+    storage_path = f"models/model_{version}.zip"
 
     # 1. Save locally to cache so it can be pushed and used locally
     local_path = get_local_cache_path(version)
@@ -217,16 +224,20 @@ async def save_model_version(model, metrics: dict, version: str) -> None:
     db = get_firestore_db()
     if db is not None:
         try:
-            db.collection("models").document(version).set(
-                {
-                    "version": version,
-                    "storagePath": storage_path,
-                    "metrics": metrics,
-                    "status": "candidate",
-                    "createdAt": datetime.now(timezone.utc),
-                }
-            )
-            logger.info("Saved model version %s record as candidate in Firestore", version)
+            doc_data = {
+                "version": version,
+                "storagePath": storage_path,
+                "metrics": metrics,
+                "status": status,
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+            }
+            if source_commit:
+                doc_data["sourceCommit"] = source_commit
+            if description:
+                doc_data["description"] = description
+
+            db.collection("models").document(version).set(doc_data)
+            logger.info("Saved model version %s record as %s in Firestore", version, status)
         except Exception as e:
             logger.error("Failed to save model metadata in Firestore: %s", str(e))
             raise
@@ -251,7 +262,7 @@ async def promote_model_version(version: str) -> dict:
     # Demote existing active models
     active_docs = db.collection("models").where(filter=firestore.FieldFilter("status", "==", "active")).get()
     for active_doc in active_docs:
-        active_doc.reference.update({"status": "inactive"})
+        active_doc.reference.update({"status": "archived"})
 
     # Promote target version
     doc_ref.update({"status": "active"})
@@ -291,8 +302,12 @@ async def get_active_model_metadata() -> dict:
                 return {
                     "version": data.get("version", sorted_docs[0].id),
                     "metrics": data.get("metrics", {}),
+                    "description": data.get("description", ""),
+                    "sourceCommit": data.get("sourceCommit", ""),
+                    "storagePath": data.get("storagePath", ""),
                     "createdAt": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
                     "status": data.get("status", "active"),
+                    "isCurrentVersion": True,
                 }
         except Exception as e:
             logger.warning("Failed to fetch active model metadata from Firestore: %s", str(e))
@@ -300,6 +315,135 @@ async def get_active_model_metadata() -> dict:
     return {
         "version": _cached_version or "dummy-v0",
         "metrics": {"note": "In-memory standalone fallback (Firebase model not uploaded yet)"},
+        "description": "Standalone fallback model",
+        "sourceCommit": "",
+        "storagePath": "",
         "createdAt": datetime.now(timezone.utc).isoformat(),
         "status": "active",
+        "isCurrentVersion": True,
     }
+
+
+def extract_run_number(v: str) -> int | None:
+    """Extract integer run number from version string (e.g. 'run-05' -> 5)."""
+    if v and v.startswith("run-"):
+        try:
+            return int(v.split("-")[1])
+        except (IndexError, ValueError):
+            pass
+    return None
+
+
+async def get_all_models_metadata(
+    version: str | None = None,
+    version_min: str | None = None,
+    version_max: str | None = None,
+    min_accuracy: float | None = None,
+    max_accuracy: float | None = None,
+    min_date: str | None = None,
+    max_date: str | None = None,
+    status: str | None = None,
+) -> list[dict]:
+    """Fetch all model metadata records from Firestore with optional filtering parameters."""
+    db = get_firestore_db()
+    if db is None:
+        return []
+
+    try:
+        docs = db.collection("models").get()
+    except Exception as e:
+        logger.error("Failed to fetch models from Firestore: %s", str(e))
+        return []
+
+    all_models = []
+
+    for doc in docs:
+        d = doc.to_dict()
+        ver = d.get("version") or doc.id
+        m_status = d.get("status", "archived")
+        is_current = (m_status == "active")
+        created_at = d.get("createdAt")
+        created_at_str = (
+            created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
+        ) if created_at else None
+
+        item = {
+            "version": ver,
+            "status": m_status,
+            "isCurrentVersion": is_current,
+            "metrics": d.get("metrics", {}),
+            "description": d.get("description", ""),
+            "sourceCommit": d.get("sourceCommit", ""),
+            "storagePath": d.get("storagePath", ""),
+            "createdAt": created_at_str,
+        }
+        all_models.append(item)
+
+    # Sort all_models descending by run number / date
+    def sort_key(m):
+        r_num = extract_run_number(m["version"])
+        if r_num is not None:
+            return (1, r_num)
+        return (0, m["createdAt"] or "")
+
+    all_models.sort(key=sort_key, reverse=True)
+
+    # Filtering logic
+    filtered = []
+    min_v_num = extract_run_number(version_min) if version_min else None
+    max_v_num = extract_run_number(version_max) if version_max else None
+
+    for m in all_models:
+        v_str = m["version"]
+        r_num = extract_run_number(v_str)
+        metrics = m.get("metrics") or {}
+        
+        test_acc = metrics.get("test_acc")
+        if test_acc is None:
+            test_acc = metrics.get("accuracy")
+
+        # 1. Exact version filter
+        if version and v_str.lower() != version.lower():
+            continue
+
+        # 2. Min version filter
+        if version_min:
+            if min_v_num is not None and r_num is not None:
+                if r_num < min_v_num:
+                    continue
+            elif v_str < version_min:
+                continue
+
+        # 3. Max version filter
+        if version_max:
+            if max_v_num is not None and r_num is not None:
+                if r_num > max_v_num:
+                    continue
+            elif v_str > version_max:
+                continue
+
+        # 4. Min accuracy filter
+        if min_accuracy is not None:
+            if test_acc is None or float(test_acc) < min_accuracy:
+                continue
+
+        # 5. Max accuracy filter
+        if max_accuracy is not None:
+            if test_acc is None or float(test_acc) > max_accuracy:
+                continue
+
+        # 6. Status filter
+        if status and m["status"].lower() != status.lower():
+            continue
+
+        # 7. Date filters
+        if min_date and m["createdAt"]:
+            if m["createdAt"] < min_date:
+                continue
+        if max_date and m["createdAt"]:
+            if m["createdAt"] > max_date:
+                continue
+
+        filtered.append(m)
+
+    return filtered

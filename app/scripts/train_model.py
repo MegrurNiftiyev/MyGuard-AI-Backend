@@ -462,6 +462,128 @@ def main():
     accuracy = (correct_predictions / len(test_docs)) * 100 if test_docs else 0.0
     print(f"Final Held-Out Test Accuracy: {accuracy:.2f}% ({correct_predictions}/{len(test_docs)})")
 
+    last_loss = float(history.history["loss"][-1]) if "history" in locals() and "loss" in history.history else 0.0
+    last_acc = float(history.history["accuracy"][-1]) if "history" in locals() and "accuracy" in history.history else 0.0
+    last_val = float(history.history["val_accuracy"][-1]) if "history" in locals() and "val_accuracy" in history.history else 0.0
+
+    prompt_local_push_confirmation(
+        model=model,
+        accuracy=accuracy,
+        correct_count=correct_predictions,
+        total_test_docs=len(test_docs),
+        train_chunk_count=len(train_texts),
+        val_chunk_count=len(val_texts),
+        last_train_loss=last_loss,
+        last_train_acc=last_acc,
+        last_val_acc=last_val,
+        test_results=test_results,
+    )
+
+
+def fetch_last_5_models_from_firestore():
+    init_firebase()
+    db = get_firestore_db()
+    if db is None:
+        return [], 0
+    try:
+        docs = db.collection("models").get()
+        model_list = []
+        max_run_num = 0
+        for doc in docs:
+            d = doc.to_dict()
+            v_id = d.get("version") or doc.id
+            if v_id.startswith("run-"):
+                try:
+                    r_num = int(v_id.split("-")[1])
+                    if r_num > max_run_num:
+                        max_run_num = r_num
+                except ValueError:
+                    pass
+            model_list.append(d)
+
+        def sort_key(d):
+            v = d.get("version", "")
+            if v.startswith("run-"):
+                try:
+                    return int(v.split("-")[1])
+                except ValueError:
+                    pass
+            return 0
+
+        model_list.sort(key=sort_key)
+        return model_list[-5:], max_run_num
+    except Exception as e:
+        print(f"Warning fetching models from Firestore: {e}")
+        return [], 0
+
+
+def prompt_local_push_confirmation(model, accuracy: float, correct_count: int, total_test_docs: int, train_chunk_count: int, val_chunk_count: int, last_train_loss: float, last_train_acc: float, last_val_acc: float, test_results: list):
+    import subprocess
+    import asyncio
+    from datetime import datetime, timezone
+    from app.core.firebase import init_firebase, get_firestore_db
+    from app.ml.serving.registry import save_model_version
+
+    last_5, max_run_num = fetch_last_5_models_from_firestore()
+
+    inj_docs = [t for t in test_results if t["expected"] == "injection"]
+    inj_correct = [t for t in inj_docs if t["is_correct"]]
+    test_recall = (len(inj_correct) / len(inj_docs) * 100.0) if inj_docs else 100.0
+
+    if last_5:
+        print("\nLast 5 registered versions:")
+        for m in last_5:
+            v_str = m.get("version", "unknown")
+            metrics_m = m.get("metrics", {})
+            test_acc_m = metrics_m.get("test_acc", 0.0) * 100.0 if isinstance(metrics_m.get("test_acc"), (int, float)) else 0.0
+            recall_m = metrics_m.get("recall", 0.0) * 100.0 if isinstance(metrics_m.get("recall"), (int, float)) else 0.0
+            status_tag = "   (currently active)" if m.get("status") == "active" else ""
+            print(f"  {v_str:<8} test acc {test_acc_m:.2f}%   recall {recall_m:.0f}%{status_tag}")
+
+    print(f"\nThis run:                    test acc {accuracy:.2f}%   recall {test_recall:.0f}%\n")
+
+    answer = input("Upload this model to Firebase as a new candidate version? (y/n): ").strip().lower()
+    if answer == "y":
+        next_run_num = max_run_num + 1 if max_run_num > 0 else 12
+        new_version_id = f"run-{next_run_num:02d}"
+
+        try:
+            res = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True)
+            source_commit = res.stdout.strip()
+        except Exception:
+            source_commit = "unknown"
+
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        desc = (
+            f"Trained {today_str}. "
+            f"Dataset: {train_chunk_count} train chunks + {val_chunk_count} val chunks. "
+            f"Held-out test: {accuracy:.2f}% accuracy ({correct_count}/{total_test_docs}), "
+            f"{test_recall:.0f}% injection recall."
+        )
+
+        metrics_payload = {
+            "train_loss": float(last_train_loss),
+            "train_acc": float(last_train_acc),
+            "val_acc": float(last_val_acc),
+            "test_acc": float(accuracy / 100.0),
+            "recall": float(test_recall / 100.0),
+            "correct_test": f"{correct_count}/{total_test_docs}",
+        }
+
+        asyncio.run(
+            save_model_version(
+                model=model,
+                metrics=metrics_payload,
+                version=new_version_id,
+                status="candidate",
+                source_commit=source_commit,
+                description=desc,
+            )
+        )
+        print(f"Uploaded as candidate version '{new_version_id}'. Use POST /model/change-version/{new_version_id} to make it active.")
+    else:
+        print("Skipped. Model saved locally only at data/models/retvec_cnn_model.keras.")
+
 
 if __name__ == "__main__":
     main()

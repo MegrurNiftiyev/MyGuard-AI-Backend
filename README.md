@@ -40,6 +40,12 @@ As enterprise organizations ingest unstructured documents (PDF, DOCX, PPTX, XLSX
 
 This microservice analyzes extracted document text, optical OCR text streams, and steganographically hidden text layers, evaluating them through a character-level **RETVec + Conv1D Deep Neural Network**. It operates completely free of external LLM API calls, delivering zero-latency, deterministic threat classification before forwarding suspicious items for downstream LLM evaluation.
 
+> [!NOTE]
+> **Model Readiness & Dataset Scaling Notice / Model Statusu və Data Tələbi:**
+> - **Architecture & Pipeline Readiness:** Modelin memarlıq quruluşu (Google RETVec + Conv1D dual-head neural network) tam olaraq qurulub, oturdulub və real-time nəticə almaq üçün hazır vəziyyətdədir.
+> - **Dataset Volume & Diversity Bottleneck:** Modelin dəqiqliyini (accuracy) daha da artırmaq üçün əsas çatışmayan cəhət mövcud dataset-in həcminin azlığı və nümunələrin oxşarlığıdır. Dataset materialları kəmiyyət və keyfiyyət baxımından (müxtəlif real-world sənəd və injection növləri ilə) artırıldıqca modelin accuracy göstəricisi də mütənasib olaraq yüksələcəkdir.
+
+
 ---
 
 ## 🌐 Project Ecosystem & Live Deployment Links
@@ -279,31 +285,56 @@ The FastAPI ML service operates seamlessly inside the 3-Layer MyGuard Security A
 
 ## 🗄️ Model Registry & Persistence Architecture
 
-To guarantee resiliency and fast container startup on platforms like Render:
+To guarantee resiliency, full model auditability, and fast container startup on platforms like Render:
 
-1. **Firebase Storage Persistence:** Trained models are archived as ZIP files (`.keras` SavedModel format) and uploaded to Firebase Storage (`models/`).
-2. **Firebase Firestore Registry:** Active and candidate models are registered in the `models` Firestore collection:
+1. **Local Model Directory (`data/models/`):**
+   All historical model version files (`model_run-01.keras` through `model_run-11.keras`) are saved and version-tagged locally under `./data/models/`. Whenever a new training run completes, it automatically saves a new versioned file (e.g., `model_run-12.keras`).
+2. **Active Model File & Cache:**
+   - **`data/cache/active_model.keras`**: Represents the currently active model loaded into memory for real-time `/analyze-injection` inference (0 ms load).
+   - **`data/models/retvec_cnn_model.keras`**: Serves as the primary active local Keras model artifact.
+3. **Firebase Storage Persistence:** Trained models are archived as ZIP files (`models/model_<version>.zip`) and uploaded to Firebase Storage.
+4. **Firebase Firestore Registry:** Active, candidate, and archived model versions are registered in the `models` Firestore collection:
    ```ts
    interface ModelMetadata {
-     version: string;             // e.g., "v20260901_143000"
-     storagePath: string;         // Firebase Storage path
+     version: string;             // e.g., "run-11"
      status: 'active' | 'candidate' | 'archived';
+     isCurrentVersion: boolean;   // true for the active model
+     sourceCommit?: string;       // Git commit hash (e.g., "42743dc")
+     description?: string;        // Detailed dataset & test metrics summary
+     storagePath: string;         // Firebase Storage path
      metrics: {
-       accuracy: number;
-       f1Score: number;
+       test_acc: number;
        recall: number;
+       train_loss: number;
      };
      createdAt: string;
    }
    ```
-3. **Local Container Disk Caching:** When the FastAPI app boots up (`lifespan` hook), it checks `./data/cache/models/`. If the active model is already cached locally, it loads in **0 ms**. Otherwise, it pulls the active model archive from Firebase Storage.
-4. **Asynchronous Background Training:** Triggered via `POST /train`, running in a background worker thread (`app/jobs/training_job.py`). Upon completion, the new model auto-registers in Firebase.
+5. **Asynchronous & Interactive Model Training:**
+   - **CLI Script (`python train_model.py`)**: Prompts an interactive comparison table and terminal confirmation before uploading new candidate versions.
+   - **Background Job (`POST /train`)**: Unattended background worker (`app/jobs/training_job.py`) auto-registers new versions in Firebase.
 
 ---
 
 ## 🌐 Complete API Reference & Payload Specifications
 
-Authentication requires the `X-Internal-Token` header for all protected routes.
+### 🔑 Authentication & Endpoint Access Policy
+
+To make API testing seamless via Swagger UI without requiring complex header setup, public endpoints are open for evaluation, while administrative/state-modifying endpoints remain protected:
+
+- **🟢 Public Endpoints (No Token Required — Swagger UI Testing Ready):**
+  - `POST /analyze-injection` (Document injection analysis)
+  - `GET /model/active` (Get current active model details)
+  - `GET /model/all-models` (Filter & list all registered models with `isCurrentVersion` flag)
+  - `GET /health` (Liveness & health check)
+  - `GET /api-docs` (Interactive Swagger UI Documentation)
+- **🔒 Protected Endpoints (`X-Internal-Token` Header Required):**
+  - `POST /model/change-version/{version_id}` (Promotes a version to active status and demotes previous active model)
+  - `POST /train` (Triggers background ML model training run)
+
+> **Swagger UI Links:**
+> - Local Dev: [`http://127.0.0.1:8000/api-docs`](http://127.0.0.1:8000/api-docs)
+> - Live Render Deployment: [`https://myguard-ai-backend.onrender.com/api-docs`](https://myguard-ai-backend.onrender.com/api-docs)
 
 ![MyGuard ML Service Swagger API Documentation](docs/images/swagger_api_docs.png)
 
@@ -324,13 +355,7 @@ Returns service status. No auth required.
 ### 2. Injection Analysis (`/analyze-injection`)
 
 #### `POST /analyze-injection`
-Accepts text extracted by Node.js (raw text, visual OCR text, hidden text layers) and returns predictions.
-
-- **Request Headers:**
-```http
-Content-Type: application/json
-X-Internal-Token: <INTERNAL_SERVICE_TOKEN>
-```
+Accepts text extracted by Node.js (raw text, visual OCR text, hidden text layers) and returns threat predictions. **Public endpoint (No authentication token required).**
 
 - **Request Body:**
 ```json
@@ -357,16 +382,15 @@ X-Internal-Token: <INTERNAL_SERVICE_TOKEN>
 ### 3. Active Model Status & Management (`/model`)
 
 #### `GET /model/active`
-Retrieves metadata of the currently active model.
+Retrieves metadata of the currently active model. **Public endpoint.**
 
 - **Response (`200 OK`):**
 ```json
 {
-  "version": "v20260901_143000",
+  "version": "run-11",
   "status": "active",
   "metrics": {
-    "accuracy": 0.85,
-    "f1": 0.92,
+    "test_acc": 0.85,
     "recall": 1.0
   },
   "createdAt": "2026-09-01T14:30:00Z"
@@ -375,15 +399,57 @@ Retrieves metadata of the currently active model.
 
 ---
 
-#### `PATCH /model/{version}/promote`
-Promotes a specific model version to `active` status.
+#### `GET /model/all-models`
+Lists and filters all models registered in the registry. **Public endpoint.**
+Supports optional query parameters: `version`, `accuracy_min`, `accuracy_max`, `created_after`, `created_before`.
+
+- **Response (`200 OK`):**
+```json
+[
+  {
+    "version": "run-11",
+    "status": "active",
+    "isCurrentVersion": true,
+    "description": "RETVec + Conv1D model run-11",
+    "metrics": {
+      "test_acc": 0.85,
+      "recall": 1.0
+    },
+    "createdAt": "2026-09-01T14:30:00Z"
+  },
+  {
+    "version": "run-10",
+    "status": "archived",
+    "isCurrentVersion": false,
+    "description": "RETVec + Conv1D model run-10",
+    "metrics": {
+      "test_acc": 0.70,
+      "recall": 1.0
+    },
+    "createdAt": "2026-08-28T10:00:00Z"
+  }
+]
+```
+
+---
+
+#### `POST /model/change-version/{version_id}`
+Promotes a specific model version to `active` status, demoting the previously active version to `archived`. **Protected Endpoint (`X-Internal-Token` required).**
+
+- **Request Headers:**
+```http
+X-Internal-Token: <INTERNAL_SERVICE_TOKEN>
+```
 
 - **Response (`200 OK`):**
 ```json
 {
-  "version": "v20260901_143000",
+  "version": "run-10",
   "status": "active",
-  "message": "Model version successfully promoted to active."
+  "metrics": {
+    "test_acc": 0.70,
+    "recall": 1.00
+  }
 }
 ```
 
@@ -392,7 +458,12 @@ Promotes a specific model version to `active` status.
 ### 4. Asynchronous Model Training (`/train`)
 
 #### `POST /train`
-Triggers an asynchronous training pipeline run.
+Triggers an asynchronous training pipeline run. **Protected Endpoint (`X-Internal-Token` required).**
+
+- **Request Headers:**
+```http
+X-Internal-Token: <INTERNAL_SERVICE_TOKEN>
+```
 
 - **Response (`202 Accepted`):**
 ```json

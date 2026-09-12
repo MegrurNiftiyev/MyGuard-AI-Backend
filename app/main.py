@@ -128,6 +128,20 @@ async def http_exception_handler(request, exc: StarletteHTTPException):
     )
 
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc: Exception):
+    """Catch unhandled internal server exceptions to prevent raw 500 server crashes."""
+    logger.error("Unhandled server error on %s: %s", request.url.path, str(exc), exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "code": "INTERNAL_SERVER_ERROR",
+            "message": "An internal server error occurred while processing the request.",
+        },
+    )
+
+
+
 @app.get("/", include_in_schema=False)
 async def root():
     """Redirect root path to interactive Swagger UI documentation."""
