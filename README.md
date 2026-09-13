@@ -41,10 +41,10 @@ As enterprise organizations ingest unstructured documents (PDF, DOCX, PPTX, XLSX
 This microservice analyzes extracted document text, optical OCR text streams, and steganographically hidden text layers, evaluating them through a character-level **RETVec + Conv1D Deep Neural Network**. It operates completely free of external LLM API calls, delivering zero-latency, deterministic threat classification before forwarding suspicious items for downstream LLM evaluation.
 
 > [!NOTE]
-> **Model Readiness & Dataset Scaling Notice / Model Statusu və Data Tələbi:**
-> - **Architecture & Pipeline Readiness:** Modelin memarlıq quruluşu (Google RETVec + Conv1D dual-head neural network) tam olaraq qurulub, oturdulub və real-time nəticə almaq üçün hazır vəziyyətdədir.
-> - **Dataset Volume & Diversity Bottleneck:** Modelin dəqiqliyini (accuracy) daha da artırmaq üçün əsas çatışmayan cəhət mövcud dataset-in həcminin azlığı və nümunələrin oxşarlığıdır. Dataset materialları kəmiyyət və keyfiyyət baxımından (müxtəlif real-world sənəd və injection növləri ilə) artırıldıqca modelin accuracy göstəricisi də mütənasib olaraq yüksələcəkdir.
-> - **Private Service Architecture & Testing Mode:** Bu ML servisi istehsalat (production) mühitində şəbəkə daxilində tam izolyasiya olunmuş **Private Microservice** kimi fəaliyyət göstərir və `X-Internal-Token` qoruması ilə təmin edilir. Münsiflər və test edənlər üçün Swagger UI üzərindən canlı sınaq rahatlığı yaratmaq məqsədilə evaluasiya endpoint-ləri müvəqqəti olaraq açıq saxlanılmışdır.
+> **Model Readiness & Dataset Scaling Notice:**
+> - **Architecture & Pipeline Readiness:** The model architecture (Google RETVec + Conv1D dual-head neural network) is fully implemented, deployed, and ready for real-time threat inference.
+> - **Dataset Volume & Diversity Bottleneck:** To further improve model accuracy, the primary requirement is expanding dataset volume and sample diversity. As training materials grow in both quantity and quality (incorporating diverse real-world documents and injection techniques), model performance will scale accordingly.
+> - **Private Service Architecture & Testing Mode:** In a production environment, this ML microservice operates as a network-isolated **Private Microservice** protected by `X-Internal-Token`. For jury evaluation and live testing convenience via Swagger UI, evaluation endpoints have been temporarily made publicly accessible.
 
 
 
