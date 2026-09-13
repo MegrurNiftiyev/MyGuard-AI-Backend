@@ -43,30 +43,14 @@ model-index:
 </p>
 
 <p align="center">
-  <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white">
-  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-v0.111-009688?style=flat-square&logo=fastapi&logoColor=white">
-  <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-v2.16-FF6F00?style=flat-square&logo=tensorflow&logoColor=white">
-  <img alt="Google RETVec" src="https://img.shields.io/badge/Google%20RETVec-Resilient%20Embeddings-4285F4?style=flat-square&logo=google&logoColor=white">
-  <a href="https://huggingface.co/MegrurNiftiyev/MyGuard-Prompt-Injection-Detector"><img alt="Hugging Face" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model%20Hub-FFD21E?style=flat-square&logo=huggingface&logoColor=black"></a>
-  <a href="https://github.com/MegrurNiftiyev/IDDA-Final-Project-Ai-Backend"><img alt="GitHub" src="https://img.shields.io/badge/GitHub-Repository-181717?style=flat-square&logo=github&logoColor=white"></a>
-  <img alt="Keras" src="https://img.shields.io/badge/Keras-D00000?style=flat-square&logo=keras&logoColor=white">
-  <img alt="Firebase" src="https://img.shields.io/badge/Firebase-Admin-FFCA28?style=flat-square&logo=firebase&logoColor=black">
-  <img alt="Supabase" src="https://img.shields.io/badge/Supabase-3ECF8E?style=flat-square&logo=supabase&logoColor=white">
-  <img alt="Docker" src="https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white">
-  <img alt="License" src="https://img.shields.io/badge/License-MIT-green?style=flat-square">
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white"> <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-v0.111-009688?style=for-the-badge&logo=fastapi&logoColor=white"> <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-v2.16-FF6F00?style=for-the-badge&logo=tensorflow&logoColor=white"> <img alt="Google RETVec" src="https://img.shields.io/badge/Google%20RETVec-Resilient%20Embeddings-4285F4?style=for-the-badge&logo=google&logoColor=white"> <a href="https://huggingface.co/MegrurNiftiyev/MyGuard-Prompt-Injection-Detector"><img alt="Hugging Face" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model%20Hub-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black"></a> <a href="https://github.com/MegrurNiftiyev/IDDA-Final-Project-Ai-Backend"><img alt="GitHub" src="https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github&logoColor=white"></a> <img alt="Keras" src="https://img.shields.io/badge/Keras-D00000?style=for-the-badge&logo=keras&logoColor=white"> <img alt="Firebase" src="https://img.shields.io/badge/Firebase%20Admin-FFCA28?style=for-the-badge&logo=firebase&logoColor=black"> <img alt="Supabase" src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white"> <img alt="Docker" src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white"> <img alt="Swagger" src="https://img.shields.io/badge/Swagger-85EA2D?style=for-the-badge&logo=swagger&logoColor=black">
 </p>
 
-## 📦 Tech Stack & Package Specifications
+## Packages & Dependencies
 
-| Package / Tool | Version | Ecosystem Role / Functionality |
-| :--- | :--- | :--- |
-| **FastAPI** | `v0.111.0` | High-throughput asynchronous REST API server |
-| **TensorFlow / Keras** | `v2.16.1` | Deep Learning model computational graph & inference |
-| **Google RETVec** | `v1.0.0` | Adversarial-resistant character-level text vectorizer |
-| **Scikit-Learn** | `v1.5.0` | Dataset stratified splits & class weight calculation |
-| **Pydantic** | `v2.7.0` | Strict data validation & API request/response schemas |
-| **Firebase Admin SDK** | `v6.5.0` | Model versioning, metadata registry & bucket storage |
-| **Supabase SDK** | `v2.3.0` | Cloud dataset ingestion & local file synchronization |
+<p align="center">
+  <a href="https://pypi.org/project/fastapi/"><img alt="fastapi" src="https://img.shields.io/badge/fastapi-v0.111.0-009688?style=for-the-badge&logo=fastapi&logoColor=white"></a> <a href="https://pypi.org/project/tensorflow/"><img alt="tensorflow" src="https://img.shields.io/badge/tensorflow-v2.16.1-FF6F00?style=for-the-badge&logo=tensorflow&logoColor=white"></a> <a href="https://pypi.org/project/retvec/"><img alt="retvec" src="https://img.shields.io/badge/retvec-v1.0.0-4285F4?style=for-the-badge&logo=google&logoColor=white"></a> <a href="https://pypi.org/project/scikit-learn/"><img alt="scikit-learn" src="https://img.shields.io/badge/scikit--learn-v1.5.0-F7931E?style=for-the-badge&logo=scikitlearn&logoColor=white"></a> <a href="https://pypi.org/project/pydantic/"><img alt="pydantic" src="https://img.shields.io/badge/pydantic-v2.7.0-E92063?style=for-the-badge&logo=pydantic&logoColor=white"></a> <a href="https://pypi.org/project/firebase-admin/"><img alt="firebase-admin" src="https://img.shields.io/badge/firebase--admin-v6.5.0-FFCA28?style=for-the-badge&logo=firebase&logoColor=black"></a> <a href="https://pypi.org/project/supabase/"><img alt="supabase" src="https://img.shields.io/badge/supabase-v2.3.0-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white"></a> <a href="https://pypi.org/project/uvicorn/"><img alt="uvicorn" src="https://img.shields.io/badge/uvicorn-v0.30.0-499885?style=for-the-badge&logo=python&logoColor=white"></a> <a href="https://pypi.org/project/python-dotenv/"><img alt="python-dotenv" src="https://img.shields.io/badge/python--dotenv-v1.0.0-ECD53F?style=for-the-badge&logo=dotenv&logoColor=black"></a>
+</p>
 
 ---
 
