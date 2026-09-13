@@ -20,6 +20,10 @@
 
 **MyGuard AI Document Security Gateway ML Service** is a stateless, high-throughput Machine Learning microservice built with **Python 3.10+**, **FastAPI**, **TensorFlow**, and **Google RETVec**. It serves as the dedicated **Layer 2 ML Classifier** within the broader MyGuard AI Document Security infrastructure.
 
+<p align="center">
+  <img src="docs/images/swagger_api_docs.png" alt="MyGuard FastAPI ML Service Swagger API Documentation" width="100%" />
+</p>
+
 As enterprise organizations ingest unstructured documents (PDF, DOCX, PPTX, XLSX, TXT) into Large Language Model (LLM) agents and RAG (Retrieval-Augmented Generation) Knowledge Graphs, adversaries attempt to inject malicious payloads (*Indirect Prompt Injections*, *Jailbreaks*, *System Override Attacks*, and *Data Exfiltration Commands*). 
 
 This microservice analyzes extracted document text, optical OCR text streams, and steganographically hidden text layers, evaluating them through a character-level **RETVec + Conv1D Deep Neural Network**. It operates completely free of external LLM API calls, delivering zero-latency, deterministic threat classification before forwarding suspicious items for downstream LLM evaluation.
@@ -107,7 +111,9 @@ This microservice uses a specialized **Dual-Output Deep Learning Model** that co
 
 ### 🖼️ Deep Learning Model Computational Graph & Architecture Diagram
 
-![MyGuard RETVec + 1D CNN Model Architecture](docs/images/model_architecture.png)
+<p align="center">
+  <img src="docs/images/model_architecture.png" alt="MyGuard RETVec + 1D CNN Model Architecture" width="360" />
+</p>
 
 #### 🔬 Detailed Layer-by-Layer Architectural Specification
 
@@ -321,8 +327,6 @@ To make API testing seamless via Swagger UI without requiring complex header set
 
 > **Interactive Swagger UI Documentation:**
 > - Live Render Deployment: [`https://myguard-ai-backend.onrender.com/api-docs`](https://myguard-ai-backend.onrender.com/api-docs)
-
-![MyGuard ML Service Swagger API Documentation](docs/images/swagger_api_docs.png)
 
 ### 1. Liveness & Health Probe (`/health`)
 
